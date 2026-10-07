@@ -38,12 +38,14 @@ impl Default for Config {
     }
 }
 
+/// First non-empty of: environment variable, config file, build-time value.
 fn pick(env: &str, file: &Option<String>, baked: Option<&'static str>) -> Option<String> {
+    let set = |s: &String| !s.trim().is_empty();
     std::env::var(env)
         .ok()
-        .or_else(|| file.clone())
-        .or_else(|| baked.map(str::to_owned))
-        .filter(|s| !s.trim().is_empty())
+        .filter(set)
+        .or_else(|| file.clone().filter(set))
+        .or_else(|| baked.map(str::to_owned).filter(set))
 }
 
 impl Config {
