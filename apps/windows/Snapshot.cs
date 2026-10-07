@@ -1,9 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
-using Windows.Storage;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Storage.Streams;
 
 namespace Apark;
 
@@ -33,14 +31,10 @@ public static class Snapshot
         var rtb = new RenderTargetBitmap();
         await rtb.RenderAsync(element);
         var pixels = await rtb.GetPixelsAsync();
-        using var stream = new InMemoryRandomAccessStream();
-        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, stream);
+        using var file = File.Create(path);
+        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, file.AsRandomAccessStream());
         encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied,
             (uint)rtb.PixelWidth, (uint)rtb.PixelHeight, 96, 96, pixels.ToArray());
         await encoder.FlushAsync();
-        stream.Seek(0);
-        var bytes = new byte[stream.Size];
-        await stream.ReadAsync(bytes.AsBuffer(), (uint)stream.Size, InputStreamOptions.None);
-        await File.WriteAllBytesAsync(path, bytes);
     }
 }

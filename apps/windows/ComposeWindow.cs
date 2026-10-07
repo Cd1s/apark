@@ -82,8 +82,10 @@ public sealed class ComposeWindow : Window
         root.Drop += async (_, e) =>
         {
             if (!e.DataView.Contains(StandardDataFormats.StorageItems)) return;
+            var deferral = e.GetDeferral();
             foreach (var item in await e.DataView.GetStorageItemsAsync())
                 if (item is StorageFile f) _attachments.Add(f.Path);
+            deferral.Complete();
             ShowFiles();
         };
         Content = root;

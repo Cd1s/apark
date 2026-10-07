@@ -40,6 +40,9 @@ running) to refresh. Message IDs are local integers from `list`/`search`.
 
 ## Headless
   apark daemon [--interval SECS]         Keep syncing in the background (JSON lines with --json).
+  apark watch [--interval SECS] [--inbox-only]
+                                         Keep syncing; print one JSON line per new message:
+                                         {"type":"new_message","message":{...}}
   apark config show | set KEY VALUE | unset KEY
   Data dir: APARK_HOME (default: platform data dir/Apark). OAuth client: APARK_GOOGLE_CLIENT_ID,
   APARK_GOOGLE_CLIENT_SECRET, APARK_MS_CLIENT_ID. Cloud encryption: APARK_SYNC_PASSPHRASE.

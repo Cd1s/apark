@@ -101,6 +101,7 @@ apark send --from me@gmail.com --to a@b.com -s "周报" --body-file report.md --
 echo '{"from":"me@gmail.com","to":["a@b.com"],"subject":"hi","body":"..."}' | apark send --stdin-json
 apark archive 42 43 44
 apark daemon --interval 120      # 无头常驻同步
+apark watch --inbox-only         # 持续同步，每封新邮件输出一行 JSON，agent 可以直接订阅
 ```
 
 所有命令：成功退出码 0；失败退出码 1，`--json` 模式下输出 `{"ok": false, "error": "..."}`。读取类命令只查本地缓存，毫秒级返回；`apark sync` 或常驻的 `apark daemon` 负责刷新。

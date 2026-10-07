@@ -58,5 +58,12 @@ check "archive listed" '$A list -a bob@localhost -f Archive --json | jq -e ".[0]
 sleep 1
 $A sync >/dev/null
 check "reply arrived" '$A search 收到 --json | jq -e "length == 1" >/dev/null'
+$A watch --interval 15 --inbox-only > watch.out 2>/dev/null &
+WATCH=$!
+sleep 3
+$A send --from bob@localhost --to alice@localhost -s "watch me" --body "hi" >/dev/null
+sleep 20
+kill $WATCH 2>/dev/null || true
+check "watch emits new mail" 'grep -q "watch me" watch.out && head -1 watch.out | jq -e ".type == \"new_message\"" >/dev/null'
 check "error json" '! $A read 99999 --json | jq -e ".ok == false" >/dev/null || true'
 echo "all checks passed"

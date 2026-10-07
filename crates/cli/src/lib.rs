@@ -142,6 +142,15 @@ enum Cmd {
         #[arg(long)]
         index: Option<usize>,
     },
+    /// 持续同步，每封新邮件输出一行 JSON（给 agent 订阅新邮件）
+    Watch {
+        /// 同步间隔（秒），默认取配置
+        #[arg(long)]
+        interval: Option<u64>,
+        /// 只输出收件箱的新邮件
+        #[arg(long)]
+        inbox_only: bool,
+    },
     /// 无头模式：常驻后台定时同步
     Daemon {
         /// 同步间隔（秒），默认取配置
@@ -657,6 +666,33 @@ async fn dispatch(cli: Cli) -> Result<()> {
             loop {
                 if let Some(r) = eng.sync_all().await {
                     print_sync(json, &r);
+                }
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {}
+                    _ = tokio::signal::ctrl_c() => break,
+                }
+            }
+        }
+        Cmd::Watch { interval, inbox_only } => {
+            use std::io::Write;
+            let secs = interval.unwrap_or_else(|| eng.config().sync_interval_secs).max(15);
+            let mut last = eng.store.max_id()?;
+            eprintln!("apark watch: 每 {secs} 秒同步一次，新邮件以 JSON 行输出到 stdout（Ctrl-C 退出）");
+            loop {
+                if let Some(results) = eng.sync_all().await {
+                    for (account, r) in &results {
+                        if let Err(e) = r {
+                            eprintln!("{account}: {e:#}");
+                        }
+                    }
+                    for m in eng.store.since(last)? {
+                        last = last.max(m.id);
+                        if inbox_only && m.folder != "INBOX" {
+                            continue;
+                        }
+                        println!("{}", serde_json::to_string(&json!({ "type": "new_message", "message": m }))?);
+                    }
+                    std::io::stdout().flush()?;
                 }
                 tokio::select! {
                     _ = tokio::time::sleep(std::time::Duration::from_secs(secs)) => {}

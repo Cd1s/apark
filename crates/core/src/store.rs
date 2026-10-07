@@ -375,6 +375,18 @@ impl Store {
         Ok(v)
     }
 
+    /// Messages stored after `id` (new arrivals since a previous `max_id`).
+    pub fn since(&self, id: i64) -> Result<Vec<MsgRow>> {
+        let c = self.r();
+        let mut st = c.prepare_cached(&format!("SELECT {ROW_COLS} FROM messages WHERE id > ?1 ORDER BY id"))?;
+        let v = st.query_map([id], row)?.collect::<rusqlite::Result<_>>()?;
+        Ok(v)
+    }
+
+    pub fn max_id(&self) -> Result<i64> {
+        Ok(self.r().query_row("SELECT COALESCE(MAX(id), 0) FROM messages", [], |r| r.get(0))?)
+    }
+
     pub fn get(&self, id: i64) -> Result<Option<MsgRow>> {
         Ok(self
             .r()
