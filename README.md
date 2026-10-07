@@ -1,6 +1,6 @@
 # Apark
 
-一个快速、简洁的多账号邮件客户端，思路来自 Spark：**用一个 Google 总账号登录，其他邮箱自动回来**。
+一个快速、简洁的多账号邮件客户端，思路来自 Spark：**登录一次，所有邮箱自动回来**。同步账号列表可以用 Google，也可以用自己的服务器、WebDAV 或同步文件夹，不依赖任何第三方。
 
 - **原生桌面版**：每个平台用自己的原生界面，不是 Electron / 网页套壳：
   - macOS：**SwiftUI**（通用二进制，Apple Silicon + Intel）
@@ -8,7 +8,11 @@
   - Linux：**GTK4 + libadwaita**（GNOME 原生风格，x64 / ARM64）
   三个界面共用同一个 Rust 内核，列表都是虚拟化的，几万封邮件也顺滑。
 - **CLI / 无头版**：`apark` 单文件，所有功能都能用命令完成，`--json` 输出稳定，适合 AI agent 和服务器。桌面版的可执行文件同样接受全部 CLI 命令。
-- **账号同步**：账号列表保存在总账号自己的 Google Drive 隐藏应用目录（`drive.appdata`），没有第三方服务器；可选同步密码，加密后再上传。
+- **账号同步（四选一）**：
+  - **自建服务器**：`apark server` 一行命令跑在任意 VPS 上；账号列表在本机用你的密码加密后才上传，服务器只存密文；
+  - **WebDAV**：坚果云、Nextcloud、群晖 NAS……；
+  - **同步文件夹**：iCloud Drive、Dropbox、OneDrive、Syncthing 里的一个文件；
+  - **Google**：账号列表放在总账号 Google Drive 的隐藏应用目录。
 
 | macOS (SwiftUI) | Linux (GTK4 / libadwaita) |
 |---|---|
@@ -54,7 +58,35 @@ xattr -dr com.apple.quarantine /Applications/Apark.app
 macOS 上让 `apark` 命令可直接调用：`ln -s /Applications/Apark.app/Contents/MacOS/apark-cli /usr/local/bin/apark`。
 Linux 需要 GTK 4.12+ 和 libadwaita 1.5+（Ubuntu 24.04、Debian 13、Fedora 40 及更新版本）。
 
-## 第一次使用：准备 Google OAuth 客户端
+## 第一次使用
+
+### 方式一：自建同步服务器（不需要 Google）
+
+服务器上（任意 Linux，用静态版 CLI 即可）：
+
+```sh
+apark server --listen 127.0.0.1:8787 --data /var/lib/apark-sync --token 一串随机令牌
+# 再用 Caddy / nginx / Cloudflare Tunnel 加上 HTTPS，例如 https://sync.example.com
+```
+
+每台设备：桌面版点“使用自建服务器 / WebDAV / 同步文件夹”，或者命令行：
+
+```sh
+apark cloud server --url https://sync.example.com --user me --token 一串随机令牌   # 会提示输入密码
+apark add imap --email me@qq.com        # 第一台设备上添加邮箱，之后会自动同步到其他设备
+```
+
+密码同时用来加密：服务器只能看到一段密文，也不知道它属于谁。忘记密码就无法解密，只能重新添加邮箱。
+
+### 方式二：WebDAV / 同步文件夹
+
+```sh
+export APARK_SYNC_PASSPHRASE=你的同步密码      # 用来加密账号列表，每台设备相同
+apark cloud webdav --url https://dav.jianguoyun.com/dav/apark/accounts.json --user me@example.com
+apark cloud file --path ~/Dropbox/Apark/accounts.json
+```
+
+### 方式三：Google 总账号
 
 Google 不允许第三方客户端共用别人的 OAuth 凭据访问邮箱，所以需要用你自己的 Google Cloud 项目创建一个（一次性，5 分钟）：
 
@@ -70,20 +102,14 @@ Google 不允许第三方客户端共用别人的 OAuth 凭据访问邮箱，所
    ```sh
    apark config set google_client_id     xxxx.apps.googleusercontent.com
    apark config set google_client_secret GOCSPX-xxxx
+   apark login
    ```
 
-   也可以用环境变量 `APARK_GOOGLE_CLIENT_ID` / `APARK_GOOGLE_CLIENT_SECRET`，或在仓库 Secrets 里配置后由 CI 编进发布包。
+只想用 Gmail 收发信但不想配 OAuth：在 Google 账号里开两步验证后创建“应用专用密码”，用 `apark add imap --email you@gmail.com` 添加即可。
 
-然后：
+### 不同步
 
-```sh
-apark login            # 浏览器里选择总账号并授权
-apark add google       # 再加其他 Gmail
-apark add imap --email me@qq.com     # QQ/163/iCloud 等用“授权码/应用专用密码”
-apark sync && apark list
-```
-
-在另一台电脑上只需 `apark login`（或桌面版点“使用 Google 账号登录”），其余账号自动恢复。
+直接添加邮箱就能用：`apark add imap --email me@qq.com`（QQ/163/iCloud 等用“授权码/应用专用密码”）。
 
 **Microsoft 账号（可选）**：在 [Azure 门户](https://portal.azure.com/) → 应用注册 → 新注册，账户类型选“任何组织目录中的帐户和个人 Microsoft 帐户”，平台选“移动和桌面应用程序”，重定向 URI 填 `http://127.0.0.1`，然后 `apark config set microsoft_client_id <应用程序ID>`。
 
@@ -126,7 +152,7 @@ WantedBy=multi-user.target
 
 - 数据目录：macOS `~/Library/Application Support/Apark`，Windows `%APPDATA%\Apark`，Linux `~/.local/share/Apark`；可用 `APARK_HOME` 覆盖。
 - `accounts.json`（凭据）权限为 0600；邮件缓存在 `apark.db`（SQLite）。
-- 云端账号列表只存在总账号的 Drive 隐藏目录，只有你的 OAuth 客户端能读取；设置 `sync_passphrase` 后会用 Argon2 + ChaCha20-Poly1305 加密，各设备需填写相同密码。
+- 同步出去的账号列表用 Argon2 + ChaCha20-Poly1305 加密（自建服务器、WebDAV、同步文件夹一律加密；Google 方式设置 `sync_passphrase` 后加密）。
 - 自建邮件服务器使用私有 CA 时，可设置 `APARK_EXTRA_CA=/path/ca.pem`。
 
 ## 为什么快

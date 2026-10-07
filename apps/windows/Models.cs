@@ -7,7 +7,19 @@ using Windows.UI.Text;
 
 namespace Apark;
 
-public sealed record Info(string Version, string DataDir, bool HasMaster, bool GoogleReady, bool MicrosoftReady);
+public sealed record Info(string Version, string DataDir, bool HasMaster, bool GoogleReady, bool MicrosoftReady, SyncInfo? Sync = null);
+
+public sealed record SyncInfo(string Type, string Where)
+{
+    [JsonIgnore]
+    public string Title => Type switch
+    {
+        "google" => "Google Drive",
+        "server" => "自建服务器",
+        "webdav" => "WebDAV",
+        _ => "同步文件夹",
+    };
+}
 
 public sealed record Account(string Email, string Name, string Provider, bool Master, string Imap, string Smtp);
 

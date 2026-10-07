@@ -6,6 +6,26 @@ struct Info: Codable {
     var hasMaster: Bool
     var googleReady: Bool
     var microsoftReady: Bool
+    var sync: SyncInfo?
+}
+
+struct SyncInfo: Codable, Equatable {
+    var type: String
+    var location: String
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case location = "where"
+    }
+
+    var title: String {
+        switch type {
+        case "google": return "Google Drive"
+        case "server": return "自建服务器"
+        case "webdav": return "WebDAV"
+        default: return "同步文件夹"
+        }
+    }
 }
 
 struct Account: Codable, Identifiable, Hashable {

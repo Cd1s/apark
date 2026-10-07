@@ -37,7 +37,7 @@ struct SettingsView: View {
             HStack {
                 Button("添加账号…") { store.showAddAccount = true }
                 Spacer()
-                if store.info?.hasMaster == true {
+                if store.info?.sync != nil {
                     Button("立即同步账号列表") { Task { try? await Core.shared.run("cloud_sync"); await store.refreshAccounts() } }
                 }
             }
@@ -47,11 +47,23 @@ struct SettingsView: View {
 
     private var general: some View {
         Form {
+            Section("账号同步") {
+                if let sync = store.info?.sync {
+                    LabeledContent(sync.title) { Text(sync.location).textSelection(.enabled) }
+                    HStack {
+                        Button("更换…") { store.showSyncSetup = true }
+                        Button("停止同步", role: .destructive) { store.syncOff() }
+                    }
+                } else {
+                    Text("未开启。开启后，在新设备上登录一次，所有邮箱都会回来。").foregroundStyle(.secondary)
+                    Button("设置同步…") { store.showSyncSetup = true }
+                }
+            }
             if let binding = Binding($config) {
                 Stepper("同步间隔：\(binding.wrappedValue.syncIntervalSecs) 秒", value: binding.syncIntervalSecs, in: 30...3600, step: 30)
                 Stepper("首次同步：每个文件夹 \(binding.wrappedValue.initialLimit) 封", value: binding.initialLimit, in: 50...20000, step: 50)
                 SecureField("云同步密码（可选）", text: optional(binding.syncPassphrase))
-                Text("账号列表保存在总账号 Google Drive 的隐藏目录。设置同步密码后会先加密再上传，每台设备都要填相同的密码。")
+                Text("WebDAV 和同步文件夹用这个密码加密账号列表；Google 方式可选。每台设备要填相同的密码。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 saveRow

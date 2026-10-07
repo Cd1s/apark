@@ -26,6 +26,9 @@ struct ContentView: View {
         .sheet(isPresented: $store.showAddAccount) {
             AddAccountView().environmentObject(store)
         }
+        .sheet(isPresented: $store.showSyncSetup) {
+            SyncSetupView().environmentObject(store)
+        }
         .onChange(of: store.pendingCompose) { id in
             guard let id else { return }
             openWindow(id: "compose", value: id)

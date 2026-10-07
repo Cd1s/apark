@@ -34,6 +34,7 @@ final class AppStore: ObservableObject {
     @Published var busy: String?
     @Published var loginURL: URL?
     @Published var showAddAccount = false
+    @Published var showSyncSetup = false
     @Published var pendingCompose: UUID?
 
     var drafts: [UUID: ComposeModel] = [:]
@@ -62,7 +63,7 @@ final class AppStore: ObservableObject {
             info = try await core.call("info")
         } catch {
             self.error = error.localizedDescription
-            info = Info(version: "?", dataDir: "", hasMaster: false, googleReady: false, microsoftReady: false)
+            info = Info(version: "?", dataDir: "", hasMaster: false, googleReady: false, microsoftReady: false, sync: nil)
         }
         await refreshAccounts()
         await reload()
@@ -298,6 +299,21 @@ final class AppStore: ObservableObject {
         await reload()
         startAutoSync()
         syncNow()
+    }
+
+    /// Sync the account list via a self-hosted server, WebDAV or a synced folder.
+    func setupSync(_ params: [String: Any]) async throws -> Int {
+        struct Joined: Decodable { var added: [String] }
+        let r: Joined = try await core.call("sync_setup", params)
+        await afterAccountsChanged()
+        return r.added.count
+    }
+
+    func syncOff() {
+        Task {
+            do { try await core.run("sync_off") } catch { self.error = error.localizedDescription }
+            await refreshAccounts()
+        }
     }
 
     func removeAccount(_ email: String) {

@@ -12,7 +12,9 @@ pub struct Config {
     pub google_client_id: Option<String>,
     pub google_client_secret: Option<String>,
     pub microsoft_client_id: Option<String>,
-    /// Encrypts the account list stored in the master account's Google Drive.
+    /// Where the account list is synced (Google Drive, self-hosted server, WebDAV, file).
+    pub sync: Option<crate::cloud::SyncTarget>,
+    /// Encrypts the synced account list (required for WebDAV and file targets).
     pub sync_passphrase: Option<String>,
     pub sync_interval_secs: u64,
     /// How many recent messages per folder the first sync downloads.
@@ -27,6 +29,7 @@ impl Default for Config {
             google_client_id: None,
             google_client_secret: None,
             microsoft_client_id: None,
+            sync: None,
             sync_passphrase: None,
             sync_interval_secs: 120,
             initial_limit: 500,

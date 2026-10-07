@@ -13,7 +13,13 @@ running) to refresh. Message IDs are local integers from `list`/`search`.
   apark add imap --email E --password-env VAR [--imap host:993] [--smtp host:465]
   apark add imap --email E --password-stdin   (password on first stdin line)
   apark accounts | apark remove E
-  apark cloud [sync|push]                Reconcile the account list with the cloud copy.
+  apark cloud status | sync | push | off  Account-list sync (any device restores all accounts).
+  apark cloud server --url URL --user U [--token T] --password-env VAR
+                                         Sync via a self-hosted `apark server` (E2E encrypted).
+  apark cloud webdav --url FILE_URL --user U --password-env VAR   (needs APARK_SYNC_PASSPHRASE)
+  apark cloud file --path PATH           File in iCloud Drive / Dropbox / Syncthing (needs passphrase)
+  apark server [--listen 0.0.0.0:8787] [--data DIR] [--token T]
+                                         Run the self-hosted sync server.
 
 ## Reading
   apark sync [-a E] [-f FOLDER]...       Fetch new mail (INBOX + extra folders).

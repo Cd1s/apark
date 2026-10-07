@@ -157,10 +157,20 @@ enum Cmd {
         #[arg(long)]
         interval: Option<u64>,
     },
-    /// 云端账号同步（总账号的 Google Drive 隐藏目录）
-    Cloud {
-        #[arg(value_enum, default_value = "sync")]
-        action: CloudAction,
+    /// 账号同步：Google、自建服务器、WebDAV 或本地同步文件夹
+    #[command(subcommand)]
+    Cloud(CloudCmd),
+    /// 运行自建同步服务器（存放加密的账号列表）
+    Server {
+        /// 监听地址
+        #[arg(long, default_value = "0.0.0.0:8787")]
+        listen: String,
+        /// 数据目录
+        #[arg(long, default_value = "./apark-sync-data")]
+        data: PathBuf,
+        /// 访问令牌（客户端需要提供），也可用环境变量 APARK_SERVER_TOKEN
+        #[arg(long, env = "APARK_SERVER_TOKEN")]
+        token: Option<String>,
     },
     /// 查看或修改配置
     #[command(subcommand)]
@@ -254,10 +264,77 @@ enum FolderAction {
     Delete,
 }
 
-#[derive(Clone, Copy, ValueEnum)]
-enum CloudAction {
+#[derive(Subcommand)]
+enum CloudCmd {
+    /// 查看当前同步方式
+    Status,
+    /// 立即同步账号列表（新的一方覆盖旧的一方）
     Sync,
+    /// 把本机账号列表上传覆盖云端
     Push,
+    /// 用自建同步服务器（apark server）同步
+    Server {
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        user: String,
+        /// 服务器访问令牌（如果服务器设置了）
+        #[arg(long, env = "APARK_SERVER_TOKEN")]
+        token: Option<String>,
+        #[command(flatten)]
+        secret: SecretArgs,
+    },
+    /// 用 WebDAV 同步（坚果云、Nextcloud、NAS…）
+    Webdav {
+        /// 账号列表文件的完整 URL，例如 https://dav.jianguoyun.com/dav/apark/accounts.json
+        #[arg(long)]
+        url: String,
+        #[arg(long)]
+        user: String,
+        #[command(flatten)]
+        secret: SecretArgs,
+    },
+    /// 用本地同步文件夹（iCloud Drive、Dropbox、Syncthing…）里的文件同步
+    File {
+        #[arg(long)]
+        path: String,
+    },
+    /// 停止同步账号列表
+    Off,
+}
+
+#[derive(Args)]
+struct SecretArgs {
+    /// 从环境变量读取密码（服务器/WebDAV 的登录密码）
+    #[arg(long)]
+    password_env: Option<String>,
+    /// 从 stdin 第一行读取密码
+    #[arg(long)]
+    password_stdin: bool,
+}
+
+fn read_secret(a: &SecretArgs, prompt: &str) -> Result<String> {
+    if let Some(var) = &a.password_env {
+        return std::env::var(var).with_context(|| format!("环境变量 {var} 未设置"));
+    }
+    if a.password_stdin {
+        let mut s = String::new();
+        std::io::stdin().read_line(&mut s)?;
+        return Ok(s.trim_end_matches(['\r', '\n']).to_owned());
+    }
+    Ok(rpassword::prompt_password(prompt)?)
+}
+
+/// Encryption passphrase for WebDAV / file sync: APARK_SYNC_PASSPHRASE, config, or prompt.
+fn sync_passphrase(eng: &Engine) -> Result<Option<String>> {
+    if eng.config().passphrase().is_some() {
+        return Ok(None);
+    }
+    let p = rpassword::prompt_password("设置同步密码（用来加密账号列表，每台设备填写相同的密码）: ")?;
+    if p.is_empty() {
+        bail!("同步密码不能为空");
+    }
+    Ok(Some(p))
 }
 
 #[derive(Args)]
@@ -381,6 +458,10 @@ async fn dispatch(cli: Cli) -> Result<()> {
     if let Cmd::Guide = cli.cmd {
         print!("{}", guide::GUIDE);
         return Ok(());
+    }
+    if let Cmd::Server { listen, data, token } = cli.cmd {
+        apark_core::init_crypto();
+        return apark_core::syncserver::serve(&listen, data, token).await;
     }
     let eng = Engine::open()?;
     match cli.cmd {
@@ -700,16 +781,52 @@ async fn dispatch(cli: Cli) -> Result<()> {
                 }
             }
         }
-        Cmd::Cloud { action } => match action {
-            CloudAction::Sync => {
-                let r = eng.cloud_sync().await?;
-                out(json, json!(r), || println!("{}  新增 {:?}  移除 {:?}", r.action, r.added, r.removed));
-            }
-            CloudAction::Push => {
-                eng.cloud_push().await?;
-                ok(json, "已上传账号列表");
-            }
-        },
+        Cmd::Cloud(c) => {
+            let res = match c {
+                CloudCmd::Status => {
+                    let t = eng.sync_target();
+                    out(json, json!(t.as_ref().map(|t| json!({ "type": t.kind(), "where": t.describe() }))), || match &t {
+                        Some(t) => println!("账号同步：{}（{}）", t.kind(), t.describe()),
+                        None => println!("没有开启账号同步。可选：apark login（Google）/ apark cloud server|webdav|file"),
+                    });
+                    return Ok(());
+                }
+                CloudCmd::Sync => eng.cloud_sync().await?,
+                CloudCmd::Push => {
+                    eng.cloud_push().await?;
+                    ok(json, "已上传账号列表");
+                    return Ok(());
+                }
+                CloudCmd::Off => {
+                    eng.disable_sync()?;
+                    ok(json, "已停止账号同步（本机账号保留）");
+                    return Ok(());
+                }
+                CloudCmd::Server { url, user, token, secret } => {
+                    let password = read_secret(&secret, &format!("{user} 在同步服务器上的密码（也用于加密）: "))?;
+                    eng.setup_sync(apark_core::SyncTarget::Server { url, user, password, token }, None).await?
+                }
+                CloudCmd::Webdav { url, user, secret } => {
+                    let password = read_secret(&secret, &format!("{user} 的 WebDAV 密码: "))?;
+                    let pass = sync_passphrase(&eng)?;
+                    eng.setup_sync(apark_core::SyncTarget::Webdav { url, user, password }, pass).await?
+                }
+                CloudCmd::File { path } => {
+                    let pass = sync_passphrase(&eng)?;
+                    eng.setup_sync(apark_core::SyncTarget::File { path }, pass).await?
+                }
+            };
+            out(json, json!(res), || {
+                println!("账号同步：{}", res.action);
+                if !res.added.is_empty() {
+                    println!("新增账号：{}", res.added.join(", "));
+                }
+                if !res.removed.is_empty() {
+                    println!("移除账号：{}", res.removed.join(", "));
+                }
+            });
+        }
+        Cmd::Server { .. } => unreachable!(),
         Cmd::Config(c) => {
             let mut cfg = eng.config();
             match c {

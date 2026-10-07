@@ -491,6 +491,9 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void SyncSetup_Click(object sender, RoutedEventArgs e) =>
+        await new SyncSetupDialog(this).ShowAsync(Root.XamlRoot);
+
     private async void AddAccount_Click(object sender, RoutedEventArgs e) =>
         await new AddAccountDialog(this, _info).ShowAsync(Root.XamlRoot);
 

@@ -12,7 +12,7 @@ struct OnboardingView: View {
                 .frame(width: 112, height: 112)
                 .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
             Text("欢迎使用 Apark").font(.system(size: 30, weight: .bold))
-            Text("用一个 Google 账号登录，所有邮箱都会回来。")
+            Text("登录一次，所有邮箱都会回来。")
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
@@ -45,7 +45,12 @@ struct OnboardingView: View {
             .disabled(store.info?.googleReady != true || store.busy != nil)
             .padding(.top, 8)
 
-            Button("添加其他邮箱…") { store.showAddAccount = true }
+            Button { store.showSyncSetup = true } label: {
+                Text("使用自建服务器 / WebDAV / 同步文件夹").frame(width: 240)
+            }
+            .controlSize(.large)
+
+            Button("不同步，直接添加邮箱…") { store.showAddAccount = true }
                 .buttonStyle(.link)
 
             if let busy = store.busy {

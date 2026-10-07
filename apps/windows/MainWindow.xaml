@@ -24,7 +24,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" Margin="0,80,0,40" MaxWidth="460">
                 <Image Source="Assets/icon-256.png" Width="112" Height="112" />
                 <TextBlock Text="欢迎使用 Apark" Style="{StaticResource TitleLargeTextBlockStyle}" HorizontalAlignment="Center" />
-                <TextBlock Text="用一个 Google 账号登录，所有邮箱都会回来。" Style="{StaticResource BodyLargeTextBlockStyle}"
+                <TextBlock Text="登录一次，所有邮箱都会回来。" Style="{StaticResource BodyLargeTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
                 <StackPanel x:Name="ClientPanel" Spacing="8" Visibility="Collapsed" Margin="0,8,0,0">
                     <TextBlock Text="首次使用：填入你的 Google OAuth 客户端（桌面应用类型，见 README）" TextWrapping="Wrap"
@@ -35,7 +35,8 @@
                 </StackPanel>
                 <Button x:Name="GoogleButton" Content="使用 Google 账号登录" Style="{StaticResource AccentButtonStyle}"
                         HorizontalAlignment="Center" MinWidth="240" Padding="16,10" Click="Login_Click" Margin="0,8,0,0" />
-                <HyperlinkButton Content="添加其他邮箱…" HorizontalAlignment="Center" Click="AddAccount_Click" />
+                <Button Content="使用自建服务器 / WebDAV / 同步文件夹" HorizontalAlignment="Center" MinWidth="240" Padding="16,10" Click="SyncSetup_Click" />
+                <HyperlinkButton Content="不同步，直接添加邮箱…" HorizontalAlignment="Center" Click="AddAccount_Click" />
                 <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Visibility="Collapsed">
                     <ProgressRing IsActive="True" Width="16" Height="16" />
                     <TextBlock x:Name="BusyText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

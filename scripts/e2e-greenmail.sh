@@ -65,5 +65,22 @@ $A send --from bob@localhost --to alice@localhost -s "watch me" --body "hi" >/de
 sleep 20
 kill $WATCH 2>/dev/null || true
 check "watch emits new mail" 'grep -q "watch me" watch.out && head -1 watch.out | jq -e ".type == \"new_message\"" >/dev/null'
+# Account sync through a self-hosted `apark server`: device B restores device A's accounts.
+$A server --listen 127.0.0.1:18787 --data "$W/sync" --token tok 2>/dev/null &
+SRV=$!
+sleep 1
+export APARK_SERVER_TOKEN=tok SPW=sync-secret
+check "server join (A)" '$A cloud server --url http://127.0.0.1:18787 --user me --password-env SPW --json | jq -e ".action == \"joined\"" >/dev/null'
+check "server stores ciphertext" '! grep -rq "alice@localhost" "$W/sync"'
+check "server join (B)" 'APARK_HOME="$W/homeB" $A cloud server --url http://127.0.0.1:18787 --user me --password-env SPW --json | jq -e ".added | length == 2" >/dev/null'
+check "B can sync restored accounts" 'APARK_HOME="$W/homeB" $A sync --json | jq -e "all(.ok)" >/dev/null'
+check "wrong password sees nothing" 'APARK_HOME="$W/homeX" SPW=nope $A cloud server --url http://127.0.0.1:18787 --user me --password-env SPW --json | jq -e ".added | length == 0" >/dev/null'
+check "bad token rejected" '! APARK_HOME="$W/homeY" APARK_SERVER_TOKEN=bad $A cloud server --url http://127.0.0.1:18787 --user me --password-env SPW >/dev/null 2>&1'
+sleep 1
+$A remove bob@localhost >/dev/null
+check "removal propagates" 'APARK_HOME="$W/homeB" $A cloud sync --json | jq -e ".removed == [\"bob@localhost\"]" >/dev/null'
+kill $SRV 2>/dev/null || true
+# Sync file (e.g. inside iCloud Drive / Dropbox).
+check "file sync" 'APARK_HOME="$W/homeC" APARK_SYNC_PASSPHRASE=p $A cloud file --path "$W/shared/accounts.json" --json | jq -e ".action == \"joined\"" >/dev/null && APARK_HOME="$W/homeD" APARK_SYNC_PASSPHRASE=p $A cloud file --path "$W/shared/accounts.json" --json | jq -e ".action == \"joined\"" >/dev/null'
 check "error json" '! $A read 99999 --json | jq -e ".ok == false" >/dev/null || true'
 echo "all checks passed"

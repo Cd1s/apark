@@ -1,34 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0" stop-color="#5AA2FF"/>
-      <stop offset="0.55" stop-color="#3F6BFF"/>
-      <stop offset="1" stop-color="#6A3DF0"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="star" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#E6ECFF"/>
+    <linearGradient id="bg" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#FFB547"/>
+      <stop offset="0.5" stop-color="#FF6A55"/>
+      <stop offset="1" stop-color="#E8336D"/>
     </linearGradient>
     <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.25"/>
       <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
     </linearGradient>
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#1B1F6B" flood-opacity="0.35"/>
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#7A1030" flood-opacity="0.35"/>
     </filter>
   </defs>
-  <!-- macOS icon grid: 824px body, 100px margin -->
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
   <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#sheen)"/>
-  <circle cx="500" cy="530" r="300" fill="url(#glow)"/>
   <g filter="url(#shadow)">
-    <!-- main four-point spark -->
-    <path fill="url(#star)" d="M500 236 C 522 430 566 496 760 526 C 566 556 522 622 500 816 C 478 622 434 556 240 526 C 434 496 478 430 500 236 Z"/>
-    <!-- small companion spark -->
-    <path fill="url(#star)" d="M738 252 C 745 314 760 330 820 338 C 760 346 745 362 738 424 C 731 362 716 346 656 338 C 716 330 731 314 738 252 Z"/>
+    <!-- A legs rising from the envelope -->
+    <path d="M330 470 L512 222 L694 470" fill="none" stroke="#FFFFFF" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- envelope (its top edge is the A's crossbar) -->
+    <rect x="252" y="452" width="520" height="330" rx="58" fill="#FFFFFF"/>
+    <path d="M300 500 L512 650 L724 500" fill="none" stroke="#FF6A55" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 </svg>

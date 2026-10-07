@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
 use crate::account::Server;
-use crate::{Account, Config, Engine, ListQuery, LoginOpts, Outgoing, Provider};
+use crate::{Account, Config, Engine, ListQuery, LoginOpts, Outgoing, Provider, SyncTarget};
 
 pub type Emit = Arc<dyn Fn(Value) + Send + Sync>;
 
@@ -84,6 +84,7 @@ impl Rpc {
                     "version": env!("CARGO_PKG_VERSION"),
                     "data_dir": crate::paths::home(),
                     "has_master": eng.has_master(),
+                    "sync": eng.sync_target().map(|t| json!({ "type": t.kind(), "where": t.describe() })),
                     "google_ready": cfg.google_client().is_some(),
                     "microsoft_ready": cfg.microsoft_client().is_some(),
                 })
@@ -212,8 +213,35 @@ impl Rpc {
             }
             "config" => serde_json::to_value(eng.config())?,
             "set_config" => {
-                let cfg: Config = serde_json::from_value(p.clone()).context("配置无效")?;
+                // Merge onto the current config so clients that don't know a field keep it.
+                let mut merged = serde_json::to_value(eng.config())?;
+                if let (Some(dst), Some(src)) = (merged.as_object_mut(), p.as_object()) {
+                    for (k, v) in src {
+                        dst.insert(k.clone(), v.clone());
+                    }
+                }
+                let cfg: Config = serde_json::from_value(merged).context("配置无效")?;
                 eng.set_config(cfg)?;
+                Value::Null
+            }
+            "sync_setup" => {
+                let kind: String = arg(p, "type")?;
+                let s = |k: &str| opt::<String>(p, k).unwrap_or_default().trim().to_owned();
+                let target = match kind.as_str() {
+                    "server" => SyncTarget::Server {
+                        url: s("url"),
+                        user: s("user"),
+                        password: arg(p, "password")?,
+                        token: opt::<String>(p, "token").filter(|t| !t.is_empty()),
+                    },
+                    "webdav" => SyncTarget::Webdav { url: s("url"), user: s("user"), password: arg(p, "password")? },
+                    "file" => SyncTarget::File { path: s("path") },
+                    _ => return Err(anyhow!("未知同步方式: {kind}")),
+                };
+                serde_json::to_value(eng.setup_sync(target, opt(p, "passphrase")).await?)?
+            }
+            "sync_off" => {
+                eng.disable_sync()?;
                 Value::Null
             }
             "cloud_sync" => serde_json::to_value(eng.cloud_sync().await?)?,

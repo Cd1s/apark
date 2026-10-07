@@ -14,8 +14,10 @@ pub mod rpc;
 pub mod demo;
 pub mod smtp;
 pub mod store;
+pub mod syncserver;
 
 pub use account::{Account, Auth, Provider, Server};
+pub use cloud::SyncTarget;
 pub use config::Config;
 pub use engine::{Engine, LoginOpts};
 pub use smtp::Outgoing;

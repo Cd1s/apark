@@ -144,13 +144,15 @@ fn build(app: &adw::Application, eng: Arc<Engine>) {
     // ---- welcome --------------------------------------------------------
     let welcome = adw::StatusPage::builder()
         .title("欢迎使用 Apark")
-        .description("用一个 Google 账号登录，所有邮箱都会回来。")
+        .description("登录一次，所有邮箱都会回来。")
         .build();
     welcome.set_paintable(Some(&gdk::Texture::from_bytes(&glib::Bytes::from_static(ICON_PNG)).expect("icon")));
     let google = gtk::Button::builder().label("使用 Google 账号登录").halign(gtk::Align::Center).build();
     google.add_css_class("pill");
     google.add_css_class("suggested-action");
-    let other = gtk::Button::builder().label("添加其他邮箱…").halign(gtk::Align::Center).build();
+    let self_hosted = gtk::Button::builder().label("使用自建服务器 / WebDAV / 同步文件夹").halign(gtk::Align::Center).build();
+    self_hosted.add_css_class("pill");
+    let other = gtk::Button::builder().label("不同步，直接添加邮箱…").halign(gtk::Align::Center).build();
     other.add_css_class("flat");
     let settings_btn = gtk::Button::builder().label("设置").halign(gtk::Align::Center).build();
     settings_btn.add_css_class("flat");
@@ -158,7 +160,7 @@ fn build(app: &adw::Application, eng: Arc<Engine>) {
     let login_link = gtk::LinkButton::with_label("https://accounts.google.com", "浏览器没有打开？点这里");
     login_link.set_visible(false);
     let welcome_box = gtk::Box::new(gtk::Orientation::Vertical, 10);
-    for w in [google.upcast_ref::<gtk::Widget>(), other.upcast_ref(), settings_btn.upcast_ref(), welcome_spinner.upcast_ref(), login_link.upcast_ref()] {
+    for w in [google.upcast_ref::<gtk::Widget>(), self_hosted.upcast_ref(), other.upcast_ref(), settings_btn.upcast_ref(), welcome_spinner.upcast_ref(), login_link.upcast_ref()] {
         welcome_box.append(w);
     }
     welcome.set_child(Some(&welcome_box));
@@ -359,7 +361,8 @@ fn build(app: &adw::Application, eng: Arc<Engine>) {
         let u = ui.clone();
         search.connect_search_changed(move |_| u.reload());
     }
-    let actions: [(&gtk::Button, fn(&Rc<Ui>)); 13] = [
+    let actions: [(&gtk::Button, fn(&Rc<Ui>)); 14] = [
+        (&self_hosted, |u| u.sync_setup_dialog()),
         (&sync_button, |u| u.sync()),
         (&compose_btn, |u| u.compose(None, Outgoing::default())),
         (&reply_btn, |u| u.reply(false)),
@@ -989,7 +992,7 @@ impl Ui {
         self.spawn(async move { eng.login_master(&opts).await }, |u, r| {
             u.welcome_spinner.set_spinning(false);
             u.login_link.set_visible(false);
-            u.welcome.set_description(Some("用一个 Google 账号登录，所有邮箱都会回来。"));
+            u.welcome.set_description(Some("登录一次，所有邮箱都会回来。"));
             if let Some((a, res)) = u.report(r) {
                 u.toast(&format!("已登录 {}，恢复了 {} 个账号", a.email, res.added.len()));
                 u.after_accounts_changed();
@@ -1079,6 +1082,85 @@ impl Ui {
         dialog.present(Some(&self.window));
     }
 
+    fn sync_setup_dialog(self: &Rc<Self>) {
+        let dialog = adw::Dialog::builder().title("账号同步").content_width(480).build();
+        let page = adw::PreferencesPage::new();
+        let group = adw::PreferencesGroup::builder()
+            .description("不用 Google 也能在新设备上一键恢复所有邮箱。账号列表在本机加密后才上传。")
+            .build();
+        let kinds = ["server", "webdav", "file"];
+        let kind = adw::ComboRow::builder()
+            .title("方式")
+            .model(&gtk::StringList::new(&["自建服务器（apark server）", "WebDAV（坚果云、Nextcloud、NAS）", "同步文件夹（Dropbox、Syncthing…）"]))
+            .build();
+        let url = adw::EntryRow::builder().title("服务器地址").build();
+        let user = adw::EntryRow::builder().title("用户名").build();
+        let password = adw::PasswordEntryRow::builder().title("密码").build();
+        let token = adw::EntryRow::builder().title("访问令牌（可选）").build();
+        let path = adw::EntryRow::builder().title("文件路径").build();
+        let passphrase = adw::PasswordEntryRow::builder().title("同步密码（加密用）").build();
+        for r in [kind.upcast_ref::<gtk::Widget>(), url.upcast_ref(), user.upcast_ref(), password.upcast_ref(), token.upcast_ref(), path.upcast_ref(), passphrase.upcast_ref()] {
+            group.add(r);
+        }
+        let update = {
+            let (url, user, password, token, path, passphrase) = (url.clone(), user.clone(), password.clone(), token.clone(), path.clone(), passphrase.clone());
+            move |k: &str| {
+                url.set_visible(k != "file");
+                url.set_title(if k == "webdav" { "文件地址（https://…/accounts.json）" } else { "服务器地址（https://…）" });
+                user.set_visible(k != "file");
+                password.set_visible(k != "file");
+                password.set_title(if k == "server" { "密码（同时用于加密）" } else { "WebDAV 密码" });
+                token.set_visible(k == "server");
+                path.set_visible(k == "file");
+                passphrase.set_visible(k != "server");
+            }
+        };
+        update("server");
+        {
+            let update = update.clone();
+            kind.connect_selected_notify(move |row| update(kinds[row.selected() as usize]));
+        }
+        let start = gtk::Button::builder().label("开始同步").halign(gtk::Align::End).margin_top(12).build();
+        start.add_css_class("suggested-action");
+        start.add_css_class("pill");
+        group.add(&start);
+        page.add(&group);
+        {
+            let (u, d) = (self.clone(), dialog.clone());
+            start.connect_clicked(move |btn| {
+                let t = |e: &adw::EntryRow| e.text().trim().to_owned();
+                let target = match kinds[kind.selected() as usize] {
+                    "server" => apark_core::SyncTarget::Server {
+                        url: t(&url),
+                        user: t(&user),
+                        password: password.text().to_string(),
+                        token: Some(t(&token)).filter(|s| !s.is_empty()),
+                    },
+                    "webdav" => apark_core::SyncTarget::Webdav { url: t(&url), user: t(&user), password: password.text().to_string() },
+                    _ => apark_core::SyncTarget::File { path: t(&path) },
+                };
+                let pass = Some(passphrase.text().to_string()).filter(|p| !p.is_empty());
+                btn.set_sensitive(false);
+                btn.set_label("正在同步…");
+                let (eng, d, btn) = (u.eng.clone(), d.clone(), btn.clone());
+                u.spawn(async move { eng.setup_sync(target, pass).await }, move |u, r| {
+                    btn.set_sensitive(true);
+                    btn.set_label("开始同步");
+                    if let Some(res) = u.report(r) {
+                        u.toast(&format!("账号同步已开启，恢复了 {} 个账号", res.added.len()));
+                        d.close();
+                        u.after_accounts_changed();
+                    }
+                });
+            });
+        }
+        let view = adw::ToolbarView::new();
+        view.add_top_bar(&adw::HeaderBar::new());
+        view.set_content(Some(&page));
+        dialog.set_child(Some(&view));
+        dialog.present(Some(&self.window));
+    }
+
     fn settings_dialog(self: &Rc<Self>) {
         let cfg = self.eng.config();
         let dialog = adw::PreferencesDialog::new();
@@ -1110,9 +1192,37 @@ impl Ui {
         dialog.add(&accounts_page);
 
         let sync_page = adw::PreferencesPage::builder().title("同步").icon_name("view-refresh-symbolic").build();
+        let target_group = adw::PreferencesGroup::builder().title("账号同步").build();
+        let target_row = adw::ActionRow::builder().title("同步方式").build();
+        match self.eng.sync_target() {
+            Some(t) => target_row.set_subtitle(&format!("{} · {}", sync_title(t.kind()), t.describe())),
+            None => target_row.set_subtitle("未开启"),
+        }
+        let change = gtk::Button::builder().label("设置…").valign(gtk::Align::Center).build();
+        let off = gtk::Button::builder().label("停止").valign(gtk::Align::Center).build();
+        off.add_css_class("destructive-action");
+        off.set_visible(self.eng.sync_target().is_some());
+        target_row.add_suffix(&change);
+        target_row.add_suffix(&off);
+        target_group.add(&target_row);
+        sync_page.add(&target_group);
+        {
+            let (u, d) = (self.clone(), dialog.clone());
+            change.connect_clicked(move |_| {
+                d.close();
+                u.sync_setup_dialog();
+            });
+            let (u, row, off2) = (self.clone(), target_row.clone(), off.clone());
+            off.connect_clicked(move |_| {
+                if u.report(u.eng.disable_sync()).is_some() {
+                    row.set_subtitle("未开启");
+                    off2.set_visible(false);
+                }
+            });
+        }
         let sync_group = adw::PreferencesGroup::builder()
             .title("同步")
-            .description("账号列表保存在总账号 Google Drive 的隐藏目录；设置同步密码后先加密再上传。")
+            .description("WebDAV 和同步文件夹用同步密码加密账号列表；每台设备要填相同的密码。")
             .build();
         let interval = adw::SpinRow::with_range(30.0, 3600.0, 30.0);
         interval.set_title("同步间隔（秒）");
@@ -1158,6 +1268,15 @@ impl Ui {
     }
 }
 
+fn sync_title(kind: &str) -> &'static str {
+    match kind {
+        "google" => "Google Drive",
+        "server" => "自建服务器",
+        "webdav" => "WebDAV",
+        _ => "同步文件夹",
+    }
+}
+
 fn folder_look(role: &str, name: &str) -> (&'static str, String) {
     let icon = match role {
         "inbox" => "mail-read-symbolic",
@@ -1183,6 +1302,9 @@ fn snapshot(ui: Rc<Ui>, dir: String) {
     glib::timeout_add_seconds_local_once(2, move || {
         if ui.store.n_items() > 0 {
             ui.selection.set_selected(0);
+        }
+        if std::env::var("APARK_SNAPSHOT_DIALOG").as_deref() == Ok("sync") {
+            ui.sync_setup_dialog();
         }
         glib::timeout_add_seconds_local_once(2, move || {
             save_widget(&ui.window, &PathBuf::from(&dir).join("main.png"));

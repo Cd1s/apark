@@ -12,6 +12,7 @@ use crate::account::{preset, Account, AccountBook, Auth, Provider, Server};
 use crate::config::Config;
 use crate::imap::{self, Secret};
 use crate::store::{Body, Folder, ListQuery, MsgRow, Store};
+use crate::cloud::SyncTarget;
 use crate::{cloud, oauth, paths, smtp, Outgoing};
 
 pub struct LoginOpts {
@@ -28,7 +29,7 @@ impl Default for LoginOpts {
 
 #[derive(Debug, Default, Clone, serde::Serialize)]
 pub struct CloudResult {
-    /// "pushed", "pulled", "unchanged" or "no-master".
+    /// "joined", "pushed", "pulled", "unchanged" or "no-sync".
     pub action: &'static str,
     pub added: Vec<String>,
     pub removed: Vec<String>,
@@ -165,8 +166,50 @@ impl Engine {
             book.upsert(acct.clone());
             book.save()?;
         }
-        let res = self.cloud_sync().await?;
+        let mut cfg = self.config();
+        cfg.sync = Some(SyncTarget::Google);
+        self.set_config(cfg)?;
+        let res = self.join_sync().await?;
         Ok((acct, res))
+    }
+
+    /// Sync the account list through a self-hosted server, WebDAV or a file,
+    /// merging with whatever is already on this device. Reverts on failure.
+    pub async fn setup_sync(&self, target: SyncTarget, passphrase: Option<String>) -> Result<CloudResult> {
+        if target == SyncTarget::Google {
+            bail!("Google 同步请使用 login（apark login）");
+        }
+        let before = self.config();
+        let mut cfg = before.clone();
+        cfg.sync = Some(target);
+        if let Some(p) = passphrase.filter(|p| !p.is_empty()) {
+            cfg.sync_passphrase = Some(p);
+        }
+        self.set_config(cfg)?;
+        match self.join_sync().await {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                self.set_config(before)?;
+                Err(e)
+            }
+        }
+    }
+
+    /// Stop syncing the account list (accounts stay on this device).
+    pub fn disable_sync(&self) -> Result<()> {
+        let mut cfg = self.config();
+        cfg.sync = None;
+        self.set_config(cfg)?;
+        let mut book = self.book();
+        for a in &mut book.accounts {
+            a.master = false;
+        }
+        book.save()
+    }
+
+    /// Current sync target; legacy setups with a master account mean Google.
+    pub fn sync_target(&self) -> Option<SyncTarget> {
+        self.config().sync.or_else(|| self.has_master().then_some(SyncTarget::Google))
     }
 
     pub async fn add_oauth(&self, provider: Provider, opts: &LoginOpts) -> Result<Account> {
@@ -220,14 +263,17 @@ impl Engine {
             let mut book = self.book();
             let was_master = book.get(email).map(|a| a.master).context("没有这个账号")?;
             book.remove(email);
-            if !was_master {
-                book.updated_at = crate::now();
-            }
+            book.updated_at = crate::now();
             book.save()?;
             was_master
         };
         self.store.remove_account(email)?;
-        if !was_master {
+        if was_master {
+            // Removing the Google master ends Google sync.
+            if self.config().sync == Some(SyncTarget::Google) {
+                self.disable_sync()?;
+            }
+        } else {
             self.cloud_push().await?;
         }
         Ok(())
@@ -250,72 +296,102 @@ impl Engine {
         }
     }
 
-    fn snapshot(&self) -> cloud::Snapshot {
+    /// Resolve the sync target into (backend, passphrase, is_google).
+    async fn backend(&self) -> Result<Option<(cloud::Backend, Option<String>, bool)>> {
+        let Some(target) = self.sync_target() else { return Ok(None) };
+        let pass = self.config().passphrase();
+        let need = |p: Option<String>| p.context("这种同步方式需要先设置同步密码（用来加密账号列表）");
+        Ok(Some(match target {
+            SyncTarget::Google => {
+                let Some(token) = self.master_token().await? else { return Ok(None) };
+                (cloud::Backend::Google { token }, pass, true)
+            }
+            SyncTarget::Server { url, user, password, token } => {
+                let id = cloud::server_blob_id(&user, &password)?;
+                (cloud::Backend::Server { url, id, token }, Some(password), false)
+            }
+            SyncTarget::Webdav { url, user, password } => (cloud::Backend::Webdav { url, user, password }, Some(need(pass)?), false),
+            SyncTarget::File { path } => (cloud::Backend::File { path: path.into() }, Some(need(pass)?), false),
+        }))
+    }
+
+    /// Accounts that travel to the cloud. The Google master signs in on its own.
+    fn snapshot(&self, google: bool) -> cloud::Snapshot {
         let book = self.book();
         cloud::Snapshot {
             updated_at: book.updated_at,
-            accounts: book.accounts.iter().filter(|a| !a.master).cloned().collect(),
+            accounts: book.accounts.iter().filter(|a| !(google && a.master)).cloned().collect(),
         }
     }
 
     pub async fn cloud_push(&self) -> Result<()> {
-        let Some(token) = self.master_token().await? else { return Ok(()) };
-        let pass = self.config().passphrase();
-        cloud::push(&self.http, &token, &self.snapshot(), pass.as_deref()).await
+        let Some((backend, pass, google)) = self.backend().await? else { return Ok(()) };
+        cloud::push(&self.http, &backend, &self.snapshot(google), pass.as_deref()).await
     }
 
-    /// Reconcile the local account list with the master account's cloud copy; newer wins.
-    pub async fn cloud_sync(&self) -> Result<CloudResult> {
-        let Some(token) = self.master_token().await? else {
-            return Ok(CloudResult { action: "no-master", ..Default::default() });
-        };
-        let pass = self.config().passphrase();
-        let local = self.snapshot();
-        let remote = cloud::pull(&self.http, &token, pass.as_deref()).await?;
-        match remote {
-            Some(r) if r.updated_at > local.updated_at => {
-                let mut res = CloudResult { action: "pulled", ..Default::default() };
-                {
-                    let mut book = self.book();
-                    let master = book.master().cloned();
-                    let mut next: Vec<Account> = master.iter().cloned().collect();
-                    for mut a in r.accounts {
-                        if next.iter().any(|x| x.email.eq_ignore_ascii_case(&a.email)) {
-                            continue;
-                        }
-                        // Keep a still-valid local access token for the same grant.
-                        if let (Some(old), Auth::Oauth { refresh_token, access_token, expires_at }) =
-                            (book.get(&a.email), &mut a.auth)
-                        {
-                            if let Auth::Oauth { refresh_token: ort, access_token: oat, expires_at: oexp } = &old.auth {
-                                if ort == refresh_token {
-                                    *access_token = oat.clone();
-                                    *expires_at = *oexp;
-                                }
-                            }
-                        }
-                        if book.get(&a.email).is_none() {
-                            res.added.push(a.email.clone());
-                        }
-                        next.push(a);
-                    }
-                    for old in &book.accounts {
-                        if !next.iter().any(|x| x.email.eq_ignore_ascii_case(&old.email)) {
-                            res.removed.push(old.email.clone());
-                        }
-                    }
-                    book.accounts = next;
-                    book.updated_at = r.updated_at;
-                    book.save()?;
-                }
-                for email in &res.removed {
-                    self.store.remove_account(email)?;
-                }
-                Ok(res)
+    /// Replace the local account set with `remote` (keeping the Google master and
+    /// still-valid access tokens). Returns the emails added and removed.
+    fn apply_remote(&self, remote: Vec<Account>, google: bool, extra: Vec<Account>, updated_at: i64) -> Result<CloudResult> {
+        let mut res = CloudResult { action: "pulled", ..Default::default() };
+        let mut book = self.book();
+        let mut next: Vec<Account> = if google { book.master().cloned().into_iter().collect() } else { vec![] };
+        for mut a in remote.into_iter().chain(extra) {
+            if next.iter().any(|x| x.email.eq_ignore_ascii_case(&a.email)) {
+                continue;
             }
+            if let Some(old) = book.get(&a.email) {
+                if let (Auth::Oauth { refresh_token, access_token, expires_at }, Auth::Oauth { refresh_token: ort, access_token: oat, expires_at: oexp }) =
+                    (&mut a.auth, &old.auth)
+                {
+                    if ort == refresh_token {
+                        *access_token = oat.clone();
+                        *expires_at = *oexp;
+                    }
+                }
+            } else {
+                res.added.push(a.email.clone());
+            }
+            next.push(a);
+        }
+        for old in &book.accounts {
+            if !next.iter().any(|x| x.email.eq_ignore_ascii_case(&old.email)) {
+                res.removed.push(old.email.clone());
+            }
+        }
+        book.accounts = next;
+        book.updated_at = updated_at;
+        book.save()?;
+        drop(book);
+        for email in &res.removed {
+            self.store.remove_account(email)?;
+        }
+        Ok(res)
+    }
+
+    /// First sync on this device: union of the cloud list and local accounts, then upload.
+    async fn join_sync(&self) -> Result<CloudResult> {
+        let Some((backend, pass, google)) = self.backend().await? else {
+            return Ok(CloudResult { action: "no-sync", ..Default::default() });
+        };
+        let local = self.snapshot(google).accounts;
+        let remote = cloud::pull(&self.http, &backend, pass.as_deref()).await?.map(|s| s.accounts).unwrap_or_default();
+        let mut res = self.apply_remote(remote, google, local, crate::now())?;
+        cloud::push(&self.http, &backend, &self.snapshot(google), pass.as_deref()).await?;
+        res.action = "joined";
+        Ok(res)
+    }
+
+    /// Reconcile the local account list with the cloud copy; newer wins.
+    pub async fn cloud_sync(&self) -> Result<CloudResult> {
+        let Some((backend, pass, google)) = self.backend().await? else {
+            return Ok(CloudResult { action: "no-sync", ..Default::default() });
+        };
+        let local = self.snapshot(google);
+        match cloud::pull(&self.http, &backend, pass.as_deref()).await? {
+            Some(r) if r.updated_at > local.updated_at => self.apply_remote(r.accounts, google, vec![], r.updated_at),
             Some(r) if r.updated_at == local.updated_at => Ok(CloudResult { action: "unchanged", ..Default::default() }),
             _ => {
-                cloud::push(&self.http, &token, &local, pass.as_deref()).await?;
+                cloud::push(&self.http, &backend, &local, pass.as_deref()).await?;
                 Ok(CloudResult { action: "pushed", ..Default::default() })
             }
         }

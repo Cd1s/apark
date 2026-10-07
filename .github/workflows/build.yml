@@ -92,8 +92,14 @@ jobs:
           dotnet-version: 8.0.x
       - name: Build Rust core and CLI
         run: cargo build --release --locked --target ${{ matrix.target }} -p apark-ffi -p apark-cli
+      - uses: microsoft/setup-msbuild@v2
       - name: Build WinUI app
-        run: dotnet publish apps/windows/Apark.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch == 'x64' && 'x64' || 'ARM64' }} -o dist/Apark
+        # Visual Studio's MSBuild has the PRI/AppxPackage tasks WinUI needs; the dotnet CLI does not.
+        run: >
+          msbuild apps/windows/Apark.csproj /restore /t:Publish /v:minimal
+          /p:Configuration=Release /p:Platform=${{ matrix.arch == 'x64' && 'x64' || 'ARM64' }}
+          /p:RuntimeIdentifier=${{ matrix.rid }} /p:SelfContained=true
+          /p:PublishDir=${{ github.workspace }}\dist\Apark\
       - name: Assemble
         shell: bash
         run: |
