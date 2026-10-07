@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
-using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
