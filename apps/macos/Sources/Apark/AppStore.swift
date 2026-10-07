@@ -40,7 +40,7 @@ final class AppStore: ObservableObject {
 
     private let core = Core.shared
     private var reloadTask: Task<Void, Never>?
-    private var eventObserver: NSObjectProtocol?
+    private var eventTask: Task<Void, Never>?
     private let env = ProcessInfo.processInfo.environment
 
     var selected: Message? { messages.first { $0.id == selection } }
@@ -51,10 +51,12 @@ final class AppStore: ObservableObject {
     func bootstrap() async {
         guard info == nil else { return }
         core.listen()
-        eventObserver = NotificationCenter.default.addObserver(forName: .aparkEvent, object: nil, queue: .main) { [weak self] note in
-            guard let data = note.object as? Data,
-                  let event = try? Core.shared.decoder.decode(CoreEvent.self, from: data) else { return }
-            Task { @MainActor in self?.handle(event) }
+        eventTask = Task { @MainActor in
+            for await note in NotificationCenter.default.notifications(named: .aparkEvent) {
+                guard let data = note.object as? Data,
+                      let event = try? Core.shared.decoder.decode(CoreEvent.self, from: data) else { continue }
+                self.handle(event)
+            }
         }
         do {
             info = try await core.call("info")

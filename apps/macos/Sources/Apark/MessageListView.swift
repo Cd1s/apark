@@ -94,7 +94,7 @@ struct MessageRow: View {
                 }
                 if showAccount {
                     HStack(spacing: 4) {
-                        Circle().fill(accentColor(for: m.account)).frame(width: 6, height: 6)
+                        Circle().fill(addressColor(m.account)).frame(width: 6, height: 6)
                         Text(m.account).font(.system(size: 10.5)).foregroundStyle(.tertiary).lineLimit(1)
                     }
                     .padding(.top, 1)

@@ -20,7 +20,7 @@ struct SettingsView: View {
             List {
                 ForEach(store.accounts) { a in
                     HStack(spacing: 10) {
-                        Avatar(name: a.email, color: accentColor(for: a.email), size: 28)
+                        Avatar(name: a.email, color: addressColor(a.email), size: 28)
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 4) {
                                 Text(a.email)

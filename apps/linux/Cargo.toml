@@ -1,0 +1,20 @@
+[package]
+name = "apark-gtk"
+description = "Apark for Linux: native GTK4 + libadwaita UI over apark-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "apark-desktop"
+path = "src/main.rs"
+
+[dependencies]
+apark-core.workspace = true
+apark-cli.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+dirs = "6"

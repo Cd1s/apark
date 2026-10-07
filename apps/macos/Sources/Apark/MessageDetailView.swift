@@ -30,7 +30,7 @@ struct MessageDetailView: View {
                 .font(.system(size: 20, weight: .semibold))
                 .textSelection(.enabled)
             HStack(alignment: .top, spacing: 10) {
-                Avatar(name: m.sender, color: accentColor(for: m.fromAddr))
+                Avatar(name: m.sender, color: addressColor(m.fromAddr))
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(m.sender).font(.headline)

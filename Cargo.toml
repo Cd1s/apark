@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/cli", "crates/desktop", "crates/ffi"]
+members = ["crates/core", "crates/cli", "crates/desktop", "crates/ffi", "apps/linux"]
+# The GTK app needs GTK4/libadwaita headers; build it explicitly with -p apark-gtk.
+default-members = ["crates/core", "crates/cli", "crates/ffi"]
 
 [workspace.package]
 version = "0.1.0"

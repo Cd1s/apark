@@ -150,7 +150,7 @@ enum Fmt {
 }
 
 /// Stable per-address colour (FNV-1a hue), matching the other Apark front-ends.
-func accentColor(for key: String) -> Color {
+func addressColor(_ key: String) -> Color {
     var h: UInt32 = 0x811C_9DC5
     for b in key.utf8 { h = (h ^ UInt32(b)) &* 0x0100_0193 }
     return Color(hue: Double(h % 3600) / 3600, saturation: 0.55, brightness: 0.85)

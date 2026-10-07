@@ -329,8 +329,16 @@ impl Engine {
         imap::connect(&acct, &secret).await
     }
 
+    /// Demo accounts (`apark dev-seed`) point at `.invalid` hosts and never touch the network.
+    fn is_demo(&self, email: &str) -> bool {
+        self.account(email).is_ok_and(|a| a.imap.host.ends_with(".invalid"))
+    }
+
     /// Sync INBOX plus `extra` folders of one account. Returns new message count.
     pub async fn sync_account(&self, email: &str, extra: &[String]) -> Result<usize> {
+        if self.is_demo(email) {
+            return Ok(0);
+        }
         let cfg = self.config();
         let mut s = self.session(email).await?;
         let folders = imap::list_folders(&mut s).await?;
@@ -416,6 +424,9 @@ impl Engine {
     where
         F: for<'a> FnOnce(&'a mut imap::Session) -> futures::future::BoxFuture<'a, Result<()>>,
     {
+        if self.is_demo(&m.account) {
+            return Ok(());
+        }
         let mut s = self.session(&m.account).await?;
         let r = op(&mut s).await;
         let _ = s.logout().await;

@@ -30,7 +30,7 @@ struct SidebarView: View {
                         }
                     } label: {
                         HStack(spacing: 8) {
-                            Circle().fill(accentColor(for: account.email)).frame(width: 8, height: 8)
+                            Circle().fill(addressColor(account.email)).frame(width: 8, height: 8)
                             Text(account.email).lineLimit(1).truncationMode(.middle)
                             if account.master {
                                 Image(systemName: "sparkle").font(.caption2).foregroundStyle(.secondary)
