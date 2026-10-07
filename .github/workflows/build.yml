@@ -118,9 +118,12 @@ jobs:
           dist\Apark\apark-cli.exe dev-seed
           $env:APARK_SNAPSHOT = "$pwd\shots"
           $p = Start-Process dist\Apark\Apark.exe -PassThru
-          if (-not $p.WaitForExit(90000)) { $p.Kill() }
-          dist\Apark\Apark.exe --version
+          if (-not $p.WaitForExit(90000)) { $p.Kill(); "timed out" } else { "exit code: $($p.ExitCode)" }
           Get-ChildItem shots -ErrorAction SilentlyContinue
+          Get-Content "$env:TEMP\apark-crash.log" -ErrorAction SilentlyContinue
+          Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Level = 2 } -MaxEvents 4 -ErrorAction SilentlyContinue | Format-List TimeCreated, ProviderName, Message
+          dist\Apark\Apark.exe --version | Out-String
+          Get-ChildItem dist\Apark -Filter *.dll | Measure-Object | Select-Object Count
       - uses: actions/upload-artifact@v4
         with:
           name: apark-windows-${{ matrix.arch }}

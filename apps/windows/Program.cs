@@ -16,14 +16,30 @@ public static class Program
         // With arguments the app behaves as the `apark` CLI (bundled as apark-cli.exe).
         if (args.Length > 0) return ForwardToCli(args);
 
-        WinRT.ComWrappersSupport.InitializeComWrappers();
-        Application.Start(_ =>
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => CrashLog(e.ExceptionObject);
+        try
         {
-            SynchronizationContext.SetSynchronizationContext(
-                new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
-            new App();
-        });
-        return 0;
+            WinRT.ComWrappersSupport.InitializeComWrappers();
+            Application.Start(_ =>
+            {
+                SynchronizationContext.SetSynchronizationContext(
+                    new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
+                new App();
+            });
+            return 0;
+        }
+        catch (Exception e)
+        {
+            CrashLog(e);
+            return 1;
+        }
+    }
+
+    /// Last-resort diagnostics: %TEMP%\apark-crash.log
+    public static void CrashLog(object error)
+    {
+        try { File.AppendAllText(Path.Combine(Path.GetTempPath(), "apark-crash.log"), $"{DateTime.Now:O} {error}\n\n"); }
+        catch { }
     }
 
     private static int ForwardToCli(string[] args)

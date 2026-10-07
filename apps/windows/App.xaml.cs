@@ -6,7 +6,11 @@ public partial class App : Application
 {
     public static MainWindow? Main { get; private set; }
 
-    public App() => InitializeComponent();
+    public App()
+    {
+        InitializeComponent();
+        UnhandledException += (_, e) => Program.CrashLog(e.Exception);
+    }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {

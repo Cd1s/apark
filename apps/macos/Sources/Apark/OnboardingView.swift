@@ -16,10 +16,34 @@ struct OnboardingView: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
+            if store.info?.googleReady == true {
+                Button { store.loginMaster() } label: {
+                    Text("使用 Google 账号登录").frame(width: 260)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(store.busy != nil)
+                .padding(.top, 8)
+                Button { store.showSyncSetup = true } label: {
+                    Text("使用自建服务器 / WebDAV / 同步文件夹").frame(width: 260)
+                }
+                .controlSize(.large)
+            } else {
+                Button { store.showSyncSetup = true } label: {
+                    Text("使用自建服务器 / WebDAV / 同步文件夹").frame(width: 260)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .padding(.top, 8)
+            }
+
+            Button("不同步，直接添加邮箱…") { store.showAddAccount = true }
+                .buttonStyle(.link)
+
             if store.info?.googleReady == false {
-                GroupBox {
+                DisclosureGroup("配置 Google 登录（可选）") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("首次使用：填入你的 Google OAuth 客户端（桌面应用类型，见 README）")
+                        Text("填入你的 Google OAuth 客户端（桌面应用类型，见 README）")
                             .font(.callout)
                             .foregroundStyle(.secondary)
                         TextField("客户端 ID", text: $clientId)
@@ -31,27 +55,11 @@ struct OnboardingView: View {
                         }
                     }
                     .textFieldStyle(.roundedBorder)
-                    .padding(6)
+                    .padding(.top, 6)
                 }
-                .frame(width: 420)
-                .padding(.top, 8)
+                .frame(width: 380)
             }
 
-            Button { store.loginMaster() } label: {
-                Text("使用 Google 账号登录").frame(width: 240)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(store.info?.googleReady != true || store.busy != nil)
-            .padding(.top, 8)
-
-            Button { store.showSyncSetup = true } label: {
-                Text("使用自建服务器 / WebDAV / 同步文件夹").frame(width: 240)
-            }
-            .controlSize(.large)
-
-            Button("不同步，直接添加邮箱…") { store.showAddAccount = true }
-                .buttonStyle(.link)
 
             if let busy = store.busy {
                 HStack(spacing: 8) {
