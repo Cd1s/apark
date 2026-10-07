@@ -26,17 +26,20 @@
                 <TextBlock Text="欢迎使用 Apark" Style="{StaticResource TitleLargeTextBlockStyle}" HorizontalAlignment="Center" />
                 <TextBlock Text="登录一次，所有邮箱都会回来。" Style="{StaticResource BodyTextBlockStyle}" FontSize="18"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
-                <StackPanel x:Name="ClientPanel" Spacing="8" Visibility="Collapsed" Margin="0,8,0,0">
-                    <TextBlock Text="首次使用：填入你的 Google OAuth 客户端（桌面应用类型，见 README）" TextWrapping="Wrap"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBox x:Name="ClientIdBox" PlaceholderText="客户端 ID" />
-                    <PasswordBox x:Name="ClientSecretBox" PlaceholderText="客户端密钥" />
-                    <Button Content="保存" HorizontalAlignment="Right" Click="SaveClient_Click" />
-                </StackPanel>
                 <Button x:Name="GoogleButton" Content="使用 Google 账号登录" Style="{StaticResource AccentButtonStyle}"
-                        HorizontalAlignment="Center" MinWidth="240" Padding="16,10" Click="Login_Click" Margin="0,8,0,0" />
-                <Button Content="使用自建服务器 / WebDAV / 同步文件夹" HorizontalAlignment="Center" MinWidth="240" Padding="16,10" Click="SyncSetup_Click" />
+                        HorizontalAlignment="Center" MinWidth="280" Padding="16,10" Click="Login_Click" Margin="0,8,0,0" />
+                <Button x:Name="SyncButtonPrimary" Content="使用自建服务器 / WebDAV / 同步文件夹" HorizontalAlignment="Center"
+                        MinWidth="280" Padding="16,10" Click="SyncSetup_Click" />
                 <HyperlinkButton Content="不同步，直接添加邮箱…" HorizontalAlignment="Center" Click="AddAccount_Click" />
+                <Expander x:Name="ClientPanel" Header="配置 Google 登录（可选）" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="填入你的 Google OAuth 客户端（桌面应用类型，见 README）" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBox x:Name="ClientIdBox" PlaceholderText="客户端 ID" />
+                        <PasswordBox x:Name="ClientSecretBox" PlaceholderText="客户端密钥" />
+                        <Button Content="保存" HorizontalAlignment="Right" Click="SaveClient_Click" />
+                    </StackPanel>
+                </Expander>
                 <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Visibility="Collapsed">
                     <ProgressRing IsActive="True" Width="16" Height="16" />
                     <TextBlock x:Name="BusyText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

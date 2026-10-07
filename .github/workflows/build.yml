@@ -123,7 +123,7 @@ jobs:
           Get-Content "$env:TEMP\apark-crash.log" -ErrorAction SilentlyContinue
           Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Level = 2 } -MaxEvents 4 -ErrorAction SilentlyContinue | Format-List TimeCreated, ProviderName, Message
           dist\Apark\Apark.exe --version | Out-String
-          Get-ChildItem dist\Apark -Filter *.dll | Measure-Object | Select-Object Count
+          Get-ChildItem dist\Apark -Recurse -Include *.pri,*.xbf | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 200
       - uses: actions/upload-artifact@v4
         with:
           name: apark-windows-${{ matrix.arch }}

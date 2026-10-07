@@ -106,7 +106,9 @@ public sealed partial class MainWindow : Window
         WelcomeView.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
         Nav.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
         ClientPanel.Visibility = _info?.GoogleReady == true ? Visibility.Collapsed : Visibility.Visible;
-        GoogleButton.IsEnabled = _info?.GoogleReady == true;
+        var google = _info?.GoogleReady == true;
+        GoogleButton.Visibility = google ? Visibility.Visible : Visibility.Collapsed;
+        SyncButtonPrimary.Style = google ? null : (Style)Application.Current.Resources["AccentButtonStyle"];
         await BuildNavAsync();
     }
 
