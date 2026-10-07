@@ -1,0 +1,194 @@
+<Window
+    x:Class="Apark.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Apark"
+    Title="Apark">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="40" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar over the Mica backdrop -->
+        <Grid x:Name="TitleBar" Padding="16,0,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image Source="Assets/icon-256.png" Width="18" Height="18" />
+                <TextBlock Text="Apark" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Welcome -->
+        <ScrollViewer x:Name="WelcomeView" Grid.Row="1" Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" Margin="0,80,0,40" MaxWidth="460">
+                <Image Source="Assets/icon-256.png" Width="112" Height="112" />
+                <TextBlock Text="欢迎使用 Apark" Style="{StaticResource TitleLargeTextBlockStyle}" HorizontalAlignment="Center" />
+                <TextBlock Text="用一个 Google 账号登录，所有邮箱都会回来。" Style="{StaticResource BodyLargeTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                <StackPanel x:Name="ClientPanel" Spacing="8" Visibility="Collapsed" Margin="0,8,0,0">
+                    <TextBlock Text="首次使用：填入你的 Google OAuth 客户端（桌面应用类型，见 README）" TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBox x:Name="ClientIdBox" PlaceholderText="客户端 ID" />
+                    <PasswordBox x:Name="ClientSecretBox" PlaceholderText="客户端密钥" />
+                    <Button Content="保存" HorizontalAlignment="Right" Click="SaveClient_Click" />
+                </StackPanel>
+                <Button x:Name="GoogleButton" Content="使用 Google 账号登录" Style="{StaticResource AccentButtonStyle}"
+                        HorizontalAlignment="Center" MinWidth="240" Padding="16,10" Click="Login_Click" Margin="0,8,0,0" />
+                <HyperlinkButton Content="添加其他邮箱…" HorizontalAlignment="Center" Click="AddAccount_Click" />
+                <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Visibility="Collapsed">
+                    <ProgressRing IsActive="True" Width="16" Height="16" />
+                    <TextBlock x:Name="BusyText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+                <HyperlinkButton x:Name="LoginLink" Content="浏览器没有打开？点这里" HorizontalAlignment="Center" Visibility="Collapsed" />
+                <TextBlock x:Name="WelcomeError" Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap" HorizontalAlignment="Center" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Main: navigation | list | reader -->
+        <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed"
+                        IsSettingsVisible="True" OpenPaneLength="250" IsPaneToggleButtonVisible="True"
+                        SelectionChanged="Nav_SelectionChanged">
+            <NavigationView.PaneFooter>
+                <StackPanel Padding="12,4,12,8" Spacing="4">
+                    <Button Click="AddAccount_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <FontIcon Glyph="&#xE710;" FontSize="14" />
+                            <TextBlock Text="添加账号" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock x:Name="SyncStatus" Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}" Margin="12,0,0,0" />
+                </StackPanel>
+            </NavigationView.PaneFooter>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="390" MinWidth="300" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Message list -->
+                <Grid Grid.Column="0" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,0,1,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid Padding="20,10,12,4">
+                        <StackPanel>
+                            <TextBlock x:Name="ListTitle" Text="收件箱" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock x:Name="ListSubtitle" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
+                            <Button x:Name="SyncButton" Click="Sync_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="收取新邮件 (F5)">
+                                <FontIcon Glyph="&#xE72C;" FontSize="16" />
+                            </Button>
+                            <Button Click="Compose_Click" Background="Transparent" BorderThickness="0" ToolTipService.ToolTip="新邮件 (Ctrl+N)">
+                                <FontIcon Glyph="&#xE932;" FontSize="16" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                    <AutoSuggestBox x:Name="Search" Grid.Row="1" PlaceholderText="搜索邮件" QueryIcon="Find" Margin="16,4,16,8" TextChanged="Search_TextChanged" />
+                    <ListView x:Name="List" Grid.Row="2" SelectionMode="Single" SelectionChanged="List_SelectionChanged" Padding="4,0,4,8">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:Message">
+                                <Grid Padding="2,10,4,10" ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Ellipse Width="8" Height="8" VerticalAlignment="Top" Margin="0,7,0,0"
+                                             Fill="{ThemeResource AccentFillColorDefaultBrush}" Visibility="{x:Bind UnreadVisibility}" />
+                                    <StackPanel Grid.Column="1" Spacing="2">
+                                        <Grid ColumnSpacing="6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{x:Bind Sender}" FontWeight="{x:Bind SenderWeight}" TextTrimming="CharacterEllipsis" />
+                                            <FontIcon Grid.Column="1" Glyph="&#xE735;" FontSize="11" Foreground="#F5A623" Visibility="{x:Bind FlagVisibility}" />
+                                            <TextBlock Grid.Column="2" Text="{x:Bind When}" Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <TextBlock Text="{x:Bind DisplaySubject}" FontWeight="{x:Bind SubjectWeight}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Snippet}" Visibility="{x:Bind SnippetVisibility}" MaxLines="2" TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis" Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,2,0,0">
+                                            <Ellipse Width="6" Height="6" Fill="{x:Bind AccountBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Text="{x:Bind Account}" FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <StackPanel x:Name="ListEmpty" Grid.Row="2" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="8" Visibility="Collapsed">
+                        <FontIcon Glyph="&#xE715;" FontSize="40" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock x:Name="ListEmptyText" Text="没有邮件" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Reader -->
+                <Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}">
+                    <StackPanel x:Name="ReaderEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
+                        <FontIcon Glyph="&#xE8C3;" FontSize="52" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="没有选中邮件" Style="{StaticResource BodyLargeTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <Grid x:Name="Reader" Visibility="Collapsed">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <CommandBar DefaultLabelPosition="Right" HorizontalAlignment="Left" Background="Transparent" Margin="12,4,0,0">
+                            <AppBarButton Icon="MailReply" Label="回复" Click="Reply_Click" ToolTipService.ToolTip="Ctrl+R" />
+                            <AppBarButton Icon="MailReplyAll" Label="全部回复" Click="ReplyAll_Click" />
+                            <AppBarButton Icon="MailForward" Label="转发" Click="Forward_Click" />
+                            <AppBarSeparator />
+                            <AppBarButton Label="归档" Click="Archive_Click" ToolTipService.ToolTip="Ctrl+E">
+                                <AppBarButton.Icon><FontIcon Glyph="&#xE7B8;" /></AppBarButton.Icon>
+                            </AppBarButton>
+                            <AppBarButton Icon="Delete" Label="删除" Click="Trash_Click" ToolTipService.ToolTip="Delete" />
+                            <AppBarButton x:Name="FlagButton" Icon="Flag" Label="星标" Click="Flag_Click" />
+                            <AppBarButton x:Name="SeenButton" Icon="Mail" Label="未读" Click="Seen_Click" />
+                        </CommandBar>
+                        <StackPanel Grid.Row="1" Padding="28,12,28,16" Spacing="12">
+                            <TextBlock x:Name="ReaderSubject" Style="{StaticResource SubtitleTextBlockStyle}" FontSize="22" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <PersonPicture x:Name="ReaderAvatar" Width="40" Height="40" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock x:Name="ReaderSender" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="ReaderAddress" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsTextSelectionEnabled="True" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="ReaderTo" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock x:Name="ReaderDate" Grid.Column="2" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                            <StackPanel x:Name="AttachmentList" Orientation="Horizontal" Spacing="8" />
+                        </StackPanel>
+                        <Border Grid.Row="2" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+                            <Grid>
+                                <ScrollViewer x:Name="TextScroll">
+                                    <TextBlock x:Name="ReaderBody" Margin="28,18,28,40" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="14.5" LineHeight="24" />
+                                </ScrollViewer>
+                                <WebView2 x:Name="Html" Visibility="Collapsed" />
+                                <ProgressRing x:Name="BodyLoading" IsActive="False" Width="28" Height="28" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </NavigationView>
+
+        <InfoBar x:Name="Toast" Grid.Row="1" IsOpen="False" Severity="Error" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,24" MaxWidth="560" />
+    </Grid>
+</Window>

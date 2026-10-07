@@ -16,51 +16,14 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
 
-  build:
-    name: ${{ matrix.label }}
-    needs: test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, label: windows-x64 }
-          - { os: windows-latest, target: aarch64-pc-windows-msvc, label: windows-arm64 }
-          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, label: linux-x64 }
-          - { os: ubuntu-22.04, target: aarch64-unknown-linux-gnu, label: linux-arm64 }
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-      - name: Linux arm64 cross toolchain
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update -q && sudo apt-get install -yq gcc-aarch64-linux-gnu
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
-      - name: Build
-        shell: bash
-        run: cargo build --release --locked --target ${{ matrix.target }} -p apark-cli -p apark-desktop
-      - name: Package
-        shell: bash
-        run: packaging/package.sh ${{ matrix.target }} ${{ matrix.label }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: apark-${{ matrix.label }}
-          path: dist/*
-
-  # Native SwiftUI app (universal arm64 + x86_64) with the Rust core linked statically.
+  # macOS: SwiftUI app (universal arm64 + x86_64), Rust core linked statically.
   macos:
     needs: test
     runs-on: macos-14
@@ -83,9 +46,7 @@ jobs:
           lipo -create target/{aarch64,x86_64}-apple-darwin/release/libapark_ffi.a -output apps/macos/lib/libapark_ffi.a
           lipo -create target/{aarch64,x86_64}-apple-darwin/release/apark -output target/apark
       - name: Build SwiftUI app
-        run: |
-          cd apps/macos
-          swift build -c release --arch arm64 --arch x86_64
+        run: cd apps/macos && swift build -c release --arch arm64 --arch x86_64
       - name: Bundle
         run: packaging/macos-bundle.sh apps/macos/.build/apple/Products/Release/Apark target/apark
       - name: Screenshots
@@ -108,31 +69,138 @@ jobs:
           name: screenshots-macos
           path: shots
 
-  # Headless CLI as a fully static binary for any Linux server.
-  cli-musl:
+  # Windows: WinUI 3 app (unpackaged, self-contained), Rust core as apark_ffi.dll.
+  windows:
     needs: test
-    runs-on: ubuntu-22.04
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, target: x86_64-pc-windows-msvc, rid: win-x64 }
+          - { arch: arm64, target: aarch64-pc-windows-msvc, rid: win-arm64 }
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-musl
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: musl
-      - run: sudo apt-get update -q && sudo apt-get install -yq musl-tools
-      - run: cargo build --release --locked --target x86_64-unknown-linux-musl -p apark-cli
-      - run: |
-          mkdir -p dist
-          tar -C target/x86_64-unknown-linux-musl/release -czf dist/apark-cli-linux-x64-static.tar.gz apark
+          key: ${{ matrix.target }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build Rust core and CLI
+        run: cargo build --release --locked --target ${{ matrix.target }} -p apark-ffi -p apark-cli
+      - name: Build WinUI app
+        run: dotnet publish apps/windows/Apark.csproj -c Release -r ${{ matrix.rid }} -p:Platform=${{ matrix.arch == 'x64' && 'x64' || 'ARM64' }} -o dist/Apark
+      - name: Assemble
+        shell: bash
+        run: |
+          t=target/${{ matrix.target }}/release
+          cp $t/apark_ffi.dll dist/Apark/
+          cp $t/apark.exe dist/Apark/apark-cli.exe
+          (cd dist && 7z a -tzip Apark-windows-${{ matrix.arch }}.zip Apark >/dev/null)
+          (cd $t && 7z a -tzip "$GITHUB_WORKSPACE/dist/apark-cli-windows-${{ matrix.arch }}.zip" apark.exe >/dev/null)
+          ls -la dist
+      - name: Screenshots
+        if: matrix.arch == 'x64'
+        shell: pwsh
+        run: |
+          $env:APARK_NO_SYNC = "1"
+          $env:APARK_HOME = "$env:RUNNER_TEMP\demo"
+          dist\Apark\apark-cli.exe dev-seed
+          $env:APARK_SNAPSHOT = "$pwd\shots"
+          $p = Start-Process dist\Apark\Apark.exe -PassThru
+          if (-not $p.WaitForExit(90000)) { $p.Kill() }
+          dist\Apark\Apark.exe --version
+          Get-ChildItem shots -ErrorAction SilentlyContinue
       - uses: actions/upload-artifact@v4
         with:
-          name: apark-linux-x64-static
+          name: apark-windows-${{ matrix.arch }}
+          path: |
+            dist/*.zip
+      - uses: actions/upload-artifact@v4
+        if: matrix.arch == 'x64'
+        with:
+          name: screenshots-windows
+          path: shots
+          if-no-files-found: ignore
+
+  # Linux: GTK4 + libadwaita app, built natively per architecture.
+  linux:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, arch: x64 }
+          - { os: ubuntu-24.04-arm, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-${{ matrix.arch }}
+      - run: sudo apt-get update -q && sudo apt-get install -yq libgtk-4-dev libadwaita-1-dev xvfb fonts-noto-cjk
+      - run: cargo build --release --locked -p apark-gtk -p apark-cli
+      - name: Package
+        run: |
+          mkdir -p dist/Apark
+          cp target/release/apark-desktop target/release/apark packaging/apark.desktop dist/Apark/
+          cp assets/icon-256.png dist/Apark/apark.png
+          tar -C dist -czf dist/Apark-linux-${{ matrix.arch }}.tar.gz Apark
+          tar -C target/release -czf dist/apark-cli-linux-${{ matrix.arch }}.tar.gz apark
+      - name: Screenshots
+        if: matrix.arch == 'x64'
+        run: |
+          export APARK_NO_SYNC=1 GSK_RENDERER=cairo
+          APARK_HOME=$RUNNER_TEMP/demo target/release/apark dev-seed
+          APARK_HOME=$RUNNER_TEMP/demo APARK_SNAPSHOT=$PWD/shots timeout 60 xvfb-run -a -s "-screen 0 1300x820x24" target/release/apark-desktop || true
+          APARK_HOME=$RUNNER_TEMP/empty APARK_SNAPSHOT=$PWD/shots/welcome timeout 60 xvfb-run -a -s "-screen 0 1300x820x24" target/release/apark-desktop || true
+          find shots -type f
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apark-linux-${{ matrix.arch }}
+          path: dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: matrix.arch == 'x64'
+        with:
+          name: screenshots-linux
+          path: shots
+          if-no-files-found: ignore
+
+  # Headless CLI as a fully static binary for any Linux server.
+  cli-static:
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-musl, arch: x64 }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, arch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - run: sudo apt-get update -q && sudo apt-get install -yq musl-tools
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p apark-cli
+      - run: |
+          mkdir -p dist
+          tar -C target/${{ matrix.target }}/release -czf dist/apark-cli-linux-${{ matrix.arch }}-static.tar.gz apark
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apark-linux-${{ matrix.arch }}-static
           path: dist/*
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, macos, cli-musl]
+    needs: [macos, windows, linux, cli-static]
     runs-on: ubuntu-latest
     permissions:
       contents: write
