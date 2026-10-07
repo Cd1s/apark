@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Apark
+Comment=Fast multi-account mail client
+Exec=apark-desktop
+Icon=apark
+Terminal=false
+Categories=Network;Email;

@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/cli", "crates/desktop"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Cd1s/apark"
+
+[workspace.dependencies]
+apark-core = { path = "crates/core" }
+apark-cli = { path = "crates/cli" }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "io-std", "signal"] }
+chrono = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
