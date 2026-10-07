@@ -447,7 +447,12 @@ impl Engine {
         let folders = imap::list_folders(&mut s).await?;
         self.store.save_folders(email, &folders)?;
         let mut targets = vec!["INBOX".to_owned()];
-        targets.extend(extra.iter().filter(|f| !f.eq_ignore_ascii_case("INBOX")).cloned());
+        for f in extra {
+            let raw = self.store.resolve_folder(email, f)?;
+            if !targets.contains(&raw) {
+                targets.push(raw);
+            }
+        }
         let mut new = 0;
         for f in &targets {
             new += imap::sync_folder(&mut s, &self.store, email, f, cfg.initial_limit, cfg.prefetch_kb * 1024).await?;
@@ -554,6 +559,8 @@ impl Engine {
 
     pub async fn move_to(&self, id: i64, dest: &str) -> Result<()> {
         let m = self.get(id)?;
+        let dest = self.store.resolve_folder(&m.account, dest)?;
+        let dest = dest.as_str();
         if m.folder == dest {
             bail!("邮件已经在 {dest}");
         }

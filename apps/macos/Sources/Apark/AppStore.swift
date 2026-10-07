@@ -146,7 +146,8 @@ final class AppStore: ObservableObject {
         case .newsletters: return "订阅"
         case .unread: return "未读"
         case .flagged: return "星标"
-        case let .folder(_, name): return Folder(name: name, role: "").title
+        case let .folder(account, name):
+            return (folders[account]?.first { $0.name == name } ?? Folder(name: name, role: "", label: nil)).title
         }
     }
 

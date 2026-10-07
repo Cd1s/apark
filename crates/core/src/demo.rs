@@ -56,7 +56,7 @@ pub fn seed(eng: &Engine) -> Result<usize> {
     for acct in ["me@gmail.com", "work@company.com", "me@icloud.com"] {
         let folders: Vec<crate::Folder> = [("INBOX", "inbox"), ("Sent", "sent"), ("Archive", "archive"), ("Trash", "trash")]
             .iter()
-            .map(|(n, r)| crate::Folder { name: (*n).into(), role: (*r).into() })
+            .map(|(n, r)| crate::Folder::new(*n, *r))
             .collect();
         eng.store.save_folders(acct, &folders)?;
     }

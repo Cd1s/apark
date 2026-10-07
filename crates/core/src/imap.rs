@@ -158,6 +158,42 @@ pub fn extract_attachments(raw: &[u8], index: Option<usize>, dir: &std::path::Pa
 
 // ---- folders ----------------------------------------------------------
 
+/// Decode IMAP modified UTF-7 (RFC 3501 §5.1.3): "&XfJSoGYfaAc-" -> "已加星标".
+pub fn decode_mutf7(s: &str) -> String {
+    use base64::Engine as _;
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('&') {
+        out.push_str(&rest[..i]);
+        let after = &rest[i + 1..];
+        let Some(j) = after.find('-') else {
+            out.push_str(&rest[i..]);
+            return out;
+        };
+        let enc = &after[..j];
+        if enc.is_empty() {
+            out.push('&');
+        } else {
+            let decoded = base64::engine::general_purpose::STANDARD_NO_PAD
+                .decode(enc.replace(',', "/"))
+                .ok()
+                .filter(|b| b.len() % 2 == 0)
+                .map(|b| String::from_utf16_lossy(&b.chunks(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect::<Vec<_>>()));
+            match decoded {
+                Some(text) => out.push_str(&text),
+                None => {
+                    out.push('&');
+                    out.push_str(enc);
+                    out.push('-');
+                }
+            }
+        }
+        rest = &after[j + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn role_of(name: &str, attrs: &str) -> &'static str {
     if name.eq_ignore_ascii_case("INBOX") {
         return "inbox";
@@ -205,7 +241,8 @@ pub async fn list_folders(s: &mut Session) -> Result<Vec<Folder>> {
         if attrs.contains("noselect") || attrs.contains("nonexistent") {
             continue;
         }
-        out.push(Folder { name: n.name().to_owned(), role: role_of(n.name(), &attrs).to_owned() });
+        let role = role_of(&decode_mutf7(n.name()), &attrs);
+        out.push(Folder::new(n.name(), role));
     }
     Ok(out)
 }

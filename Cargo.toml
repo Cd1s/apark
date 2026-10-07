@@ -5,7 +5,7 @@ members = ["crates/core", "crates/cli", "crates/ffi", "apps/linux"]
 default-members = ["crates/core", "crates/cli", "crates/ffi"]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Cd1s/apark"

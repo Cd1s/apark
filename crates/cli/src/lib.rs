@@ -558,7 +558,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
                     for (e, fs) in &all {
                         println!("{e}");
                         for f in fs {
-                            println!("  {}{}", f.name, if f.role.is_empty() { String::new() } else { format!("  [{}]", f.role) });
+                            println!("  {}{}", f.label, if f.role.is_empty() { String::new() } else { format!("  [{}]", f.role) });
                         }
                     }
                 },
@@ -578,11 +578,14 @@ async fn dispatch(cli: Cli) -> Result<()> {
         }
         Cmd::List(a) => {
             // A folder that was never synced would look empty; fetch it first.
+            let mut a = a;
             if let (Some(acct), Some(folder)) = (&a.filter.account, &a.filter.folder) {
                 let email = eng.account(acct)?.email;
-                if eng.store.folder_state(&email, folder)? == (0, 0) {
-                    eng.sync_account(&email, std::slice::from_ref(folder)).await?;
+                let raw = eng.store.resolve_folder(&email, folder)?;
+                if eng.store.folder_state(&email, &raw)? == (0, 0) {
+                    eng.sync_account(&email, std::slice::from_ref(&raw)).await?;
                 }
+                a.filter.folder = Some(raw);
             }
             if a.sync {
                 let r = eng.sync_all().await.unwrap_or_default();

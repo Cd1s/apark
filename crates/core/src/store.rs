@@ -84,8 +84,19 @@ pub struct Body {
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Folder {
+    /// Raw IMAP name (modified UTF-7), used for every server command.
     pub name: String,
     pub role: String,
+    /// Human-readable full path, e.g. "[Gmail]/已加星标".
+    pub label: String,
+}
+
+impl Folder {
+    pub fn new(name: impl Into<String>, role: impl Into<String>) -> Folder {
+        let name = name.into();
+        let label = crate::imap::decode_mutf7(&name);
+        Folder { name, role: role.into(), label }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -230,10 +241,28 @@ impl Store {
         let c = self.r();
         let mut st = c.prepare("SELECT name, role FROM folders WHERE account=?1")?;
         let mut v: Vec<Folder> = st
-            .query_map([account], |r| Ok(Folder { name: r.get(0)?, role: r.get(1)? }))?
+            .query_map([account], |r| Ok(Folder::new(r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
             .collect::<rusqlite::Result<_>>()?;
-        v.sort_by(|a, b| role_rank(&a.role).cmp(&role_rank(&b.role)).then_with(|| a.name.cmp(&b.name)));
+        v.sort_by(|a, b| role_rank(&a.role).cmp(&role_rank(&b.role)).then_with(|| a.label.cmp(&b.label)));
         Ok(v)
+    }
+
+    /// Map what a person or agent typed (raw name, decoded path or last path
+    /// segment, case-insensitive) to the raw IMAP folder name.
+    pub fn resolve_folder(&self, account: &str, input: &str) -> Result<String> {
+        if input.eq_ignore_ascii_case("INBOX") {
+            return Ok("INBOX".into());
+        }
+        let folders = self.folders(account)?;
+        let leaf = |f: &Folder| f.label.rsplit(['/', '.']).next().unwrap_or(&f.label).to_lowercase();
+        let want = input.to_lowercase();
+        Ok(folders
+            .iter()
+            .find(|f| f.name == input)
+            .or_else(|| folders.iter().find(|f| f.label.to_lowercase() == want))
+            .or_else(|| folders.iter().find(|f| leaf(f) == want))
+            .map(|f| f.name.clone())
+            .unwrap_or_else(|| input.to_owned()))
     }
 
     pub fn folder_by_role(&self, account: &str, roles: &[&str]) -> Result<Option<String>> {

@@ -596,7 +596,7 @@ impl Ui {
         for a in &accounts {
             header(&a.email, &mut items);
             for f in self.eng.folders(&a.email).unwrap_or_default() {
-                let (icon, name) = folder_look(&f.role, &f.name);
+                let (icon, name) = folder_look(&f.role, &f.label);
                 entry(icon, &name, 0, Nav::Folder(a.email.clone(), f.name.clone()), &mut items);
             }
         }
@@ -653,7 +653,7 @@ impl Ui {
             Nav::Category(_) => "订阅".into(),
             Nav::Unread => "未读".into(),
             Nav::Flagged => "星标".into(),
-            Nav::Folder(_, f) => folder_look("", &f).1,
+            Nav::Folder(_, f) => folder_look("", &apark_core::imap::decode_mutf7(&f)).1,
         }
     }
 

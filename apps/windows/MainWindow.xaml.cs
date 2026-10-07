@@ -13,6 +13,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly ObservableCollection<Message> _messages = new();
     private List<Account> _accounts = new();
+    private readonly Dictionary<(string, string), string> _folderLabels = new();
     private Info? _info;
     private object _nav = "inbox";
     private MailBody? _body;
@@ -155,7 +156,11 @@ public sealed partial class MainWindow : Window
             List<Folder> folders;
             try { folders = await Core.Call<List<Folder>>("folders", new { email = a.Email }); }
             catch { folders = new(); }
-            foreach (var f in folders) parent.MenuItems.Add(Item(f.Title, f.Glyph, (a.Email, f.Name)));
+            foreach (var f in folders)
+            {
+                _folderLabels[(a.Email, f.Name)] = f.Title;
+                parent.MenuItems.Add(Item(f.Title, f.Glyph, (a.Email, f.Name)));
+            }
             var menu = new MenuFlyout();
             var remove = new MenuFlyoutItem { Text = "删除账号", Icon = new FontIcon { Glyph = "" } };
             var email = a.Email;
@@ -213,7 +218,7 @@ public sealed partial class MainWindow : Window
         "newsletter" => "订阅",
         "unread" => "未读",
         "flagged" => "星标",
-        ValueTuple<string, string> f => new Folder(f.Item2, "").Title,
+        ValueTuple<string, string> f => (_folderLabels.TryGetValue(f, out var label) ? label : new Folder(f.Item2, "").Title),
         _ => "收件箱",
     };
 

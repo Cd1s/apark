@@ -41,10 +41,13 @@ struct Account: Codable, Identifiable, Hashable {
 struct Folder: Codable, Hashable {
     var name: String
     var role: String
+    /// Decoded display path (IMAP names are modified UTF-7 on the wire).
+    var label: String?
 
     var title: String {
         if name.uppercased() == "INBOX" { return "收件箱" }
-        return name.split(whereSeparator: { $0 == "/" || $0 == "." }).last.map(String.init) ?? name
+        let shown = label ?? name
+        return shown.split(whereSeparator: { $0 == "/" || $0 == "." }).last.map(String.init) ?? shown
     }
 
     var symbol: String {

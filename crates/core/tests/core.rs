@@ -82,3 +82,13 @@ fn servers() {
     assert_eq!(Server::parse("mail.x.com:587", 465).unwrap(), Server::new("mail.x.com", 587));
     assert_eq!(Server::parse("mail.x.com", 993).unwrap().port, 993);
 }
+
+#[test]
+fn modified_utf7_folder_names() {
+    use apark_core::imap::decode_mutf7;
+    assert_eq!(decode_mutf7("&XfJSoGYfaAc-"), "已加星标");
+    assert_eq!(decode_mutf7("[Gmail]/&V4NXPpCuTvY-"), "[Gmail]/垃圾邮件");
+    assert_eq!(decode_mutf7("Tom &- Jerry"), "Tom & Jerry");
+    assert_eq!(decode_mutf7("Notes"), "Notes");
+    assert_eq!(decode_mutf7("broken &zz"), "broken &zz");
+}

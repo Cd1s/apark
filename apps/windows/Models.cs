@@ -23,12 +23,13 @@ public sealed record SyncInfo(string Type, string Where)
 
 public sealed record Account(string Email, string Name, string Provider, bool Master, string Imap, string Smtp);
 
-public sealed record Folder(string Name, string Role)
+public sealed record Folder(string Name, string Role, string? Label = null)
 {
+    /// Last segment of the decoded path (IMAP names are modified UTF-7 on the wire).
     [JsonIgnore]
     public string Title => Name.Equals("INBOX", StringComparison.OrdinalIgnoreCase)
         ? "收件箱"
-        : Name.Split('/', '.').Last();
+        : (Label ?? Name).Split('/', '.').Last();
 
     [JsonIgnore]
     public string Glyph => Role switch
