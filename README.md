@@ -14,9 +14,9 @@
   - **同步文件夹**：iCloud Drive、Dropbox、OneDrive、Syncthing 里的一个文件；
   - **Google**：账号列表放在总账号 Google Drive 的隐藏应用目录。
 
-| macOS (SwiftUI) | Linux (GTK4 / libadwaita) |
-|---|---|
-| ![macOS](docs/screenshot-macos.png) | ![Linux](docs/screenshot-linux.png) |
+| macOS (SwiftUI) | Windows (WinUI 3) | Linux (GTK4 / libadwaita) |
+|---|---|---|
+| ![macOS](docs/screenshot-macos.png) | ![Windows](docs/screenshot-windows.png) | ![Linux](docs/screenshot-linux.png) |
 
 ## 功能
 

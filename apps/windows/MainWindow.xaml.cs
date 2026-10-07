@@ -29,6 +29,10 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "icon.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1280, 820));
         List.ItemsSource = _messages;
+        Root.Loaded += (_, _) =>
+        {
+            if (Nav.SettingsItem is NavigationViewItem settings) settings.Content = "设置";
+        };
         AddShortcuts();
         Core.Listen();
         Core.Event += e => DispatcherQueue.TryEnqueue(() => OnCoreEvent(e));

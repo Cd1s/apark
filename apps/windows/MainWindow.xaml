@@ -6,6 +6,7 @@
     Title="Apark">
 
     <Grid x:Name="Root">
+        <!-- Consistent CJK fallback so mixed Chinese/Latin text keeps one weight. -->
         <Grid.RowDefinitions>
             <RowDefinition Height="40" />
             <RowDefinition Height="*" />
@@ -160,7 +161,7 @@
                             <AppBarButton x:Name="SeenButton" Icon="Mail" Label="未读" Click="Seen_Click" />
                         </CommandBar>
                         <StackPanel Grid.Row="1" Padding="28,12,28,16" Spacing="12">
-                            <TextBlock x:Name="ReaderSubject" Style="{StaticResource SubtitleTextBlockStyle}" FontSize="22" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                            <TextBlock x:Name="ReaderSubject" FontSize="22" FontWeight="Bold" FontFamily="Segoe UI Variable Display, Microsoft YaHei UI" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />

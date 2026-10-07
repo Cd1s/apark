@@ -156,6 +156,11 @@ fn build(app: &adw::Application, eng: Arc<Engine>) {
     other.add_css_class("flat");
     let settings_btn = gtk::Button::builder().label("设置").halign(gtk::Align::Center).build();
     settings_btn.add_css_class("flat");
+    // Google needs an OAuth client; without one, self-hosted sync is the main path.
+    if eng.config().google_client().is_none() {
+        google.set_visible(false);
+        self_hosted.add_css_class("suggested-action");
+    }
     let welcome_spinner = gtk::Spinner::new();
     let login_link = gtk::LinkButton::with_label("https://accounts.google.com", "浏览器没有打开？点这里");
     login_link.set_visible(false);
