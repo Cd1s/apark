@@ -317,11 +317,31 @@ impl Engine {
 
     /// Accounts that travel to the cloud. The Google master signs in on its own.
     fn snapshot(&self, google: bool) -> cloud::Snapshot {
+        let cfg = self.config();
         let book = self.book();
         cloud::Snapshot {
             updated_at: book.updated_at,
             accounts: book.accounts.iter().filter(|a| !(google && a.master)).cloned().collect(),
+            clients: cloud::Clients {
+                google_client_id: cfg.google_client_id.clone(),
+                google_client_secret: cfg.google_client_secret.clone(),
+                microsoft_client_id: cfg.microsoft_client_id.clone(),
+            },
         }
+    }
+
+    /// Take OAuth client settings from the cloud copy where this device has none,
+    /// so restored Google/Microsoft accounts can refresh their tokens here.
+    fn adopt_clients(&self, c: &cloud::Clients) -> Result<()> {
+        let mut cfg = self.config();
+        let before = (cfg.google_client_id.clone(), cfg.google_client_secret.clone(), cfg.microsoft_client_id.clone());
+        cfg.google_client_id = cfg.google_client_id.or_else(|| c.google_client_id.clone());
+        cfg.google_client_secret = cfg.google_client_secret.or_else(|| c.google_client_secret.clone());
+        cfg.microsoft_client_id = cfg.microsoft_client_id.or_else(|| c.microsoft_client_id.clone());
+        if (cfg.google_client_id.clone(), cfg.google_client_secret.clone(), cfg.microsoft_client_id.clone()) != before {
+            self.set_config(cfg)?;
+        }
+        Ok(())
     }
 
     pub async fn cloud_push(&self) -> Result<()> {
@@ -374,7 +394,11 @@ impl Engine {
             return Ok(CloudResult { action: "no-sync", ..Default::default() });
         };
         let local = self.snapshot(google).accounts;
-        let remote = cloud::pull(&self.http, &backend, pass.as_deref()).await?.map(|s| s.accounts).unwrap_or_default();
+        let remote = cloud::pull(&self.http, &backend, pass.as_deref()).await?;
+        if let Some(r) = &remote {
+            self.adopt_clients(&r.clients)?;
+        }
+        let remote = remote.map(|s| s.accounts).unwrap_or_default();
         let mut res = self.apply_remote(remote, google, local, crate::now())?;
         cloud::push(&self.http, &backend, &self.snapshot(google), pass.as_deref()).await?;
         res.action = "joined";
@@ -388,7 +412,10 @@ impl Engine {
         };
         let local = self.snapshot(google);
         match cloud::pull(&self.http, &backend, pass.as_deref()).await? {
-            Some(r) if r.updated_at > local.updated_at => self.apply_remote(r.accounts, google, vec![], r.updated_at),
+            Some(r) if r.updated_at > local.updated_at => {
+                self.adopt_clients(&r.clients)?;
+                self.apply_remote(r.accounts, google, vec![], r.updated_at)
+            }
             Some(r) if r.updated_at == local.updated_at => Ok(CloudResult { action: "unchanged", ..Default::default() }),
             _ => {
                 cloud::push(&self.http, &backend, &local, pass.as_deref()).await?;

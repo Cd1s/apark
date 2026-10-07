@@ -1,14 +1,15 @@
 #!/bin/sh
-# End-to-end CLI test against a throwaway GreenMail server (Docker) with a private CA.
+# End-to-end CLI test against throwaway GreenMail (IMAP/SMTP) and WebDAV servers in Docker.
+# Runs in CI (.github/workflows/build.yml, job e2e) — not meant for shared build machines.
 #   cargo build --release -p apark-cli && scripts/e2e-greenmail.sh
-# Binds 127.0.0.1:993 and :465. Exits non-zero on the first failing check.
+# Binds 127.0.0.1:993, :465, :18080 and :18787. Exits non-zero on the first failing check.
 set -eu
 A="${APARK_BIN:-$(pwd)/target/release/apark}"
 W="$(mktemp -d)"
 export APARK_HOME="$W/home" APARK_EXTRA_CA="$W/ca.pem"
 cleanup() {
   [ -n "${E2E_DEBUG:-}" ] && docker logs apark-greenmail 2>&1 | grep -iE "exception|ssl|handshake|error" | tail -15
-  docker rm -f apark-greenmail >/dev/null 2>&1 || true
+  docker rm -f apark-greenmail apark-dav >/dev/null 2>&1 || true
   rm -rf "$W"
 }
 trap cleanup EXIT
@@ -82,5 +83,17 @@ check "removal propagates" 'APARK_HOME="$W/homeB" $A cloud sync --json | jq -e "
 kill $SRV 2>/dev/null || true
 # Sync file (e.g. inside iCloud Drive / Dropbox).
 check "file sync" 'APARK_HOME="$W/homeC" APARK_SYNC_PASSPHRASE=p $A cloud file --path "$W/shared/accounts.json" --json | jq -e ".action == \"joined\"" >/dev/null && APARK_HOME="$W/homeD" APARK_SYNC_PASSPHRASE=p $A cloud file --path "$W/shared/accounts.json" --json | jq -e ".action == \"joined\"" >/dev/null'
+# WebDAV (nested path that does not exist yet) + OAuth client settings travel with the list.
+docker run -d --name apark-dav -p 127.0.0.1:18080:80 -e AUTH_TYPE=Basic -e USERNAME=me -e PASSWORD=davpw bytemark/webdav >/dev/null
+for _ in $(seq 30); do curl -s -o /dev/null -u me:davpw http://127.0.0.1:18080/ && break; sleep 1; done
+export DPW=davpw
+DAV=http://127.0.0.1:18080/dav/apark/sub/accounts.json
+APARK_HOME="$W/davA" $A config set microsoft_client_id ms-client-id >/dev/null
+echo pw | APARK_HOME="$W/davA" $A add imap --email carol@localhost --password-stdin $srv >/dev/null
+check "webdav join (A)" 'APARK_HOME="$W/davA" APARK_SYNC_PASSPHRASE=dav-secret $A cloud webdav --url $DAV --user me --password-env DPW --json | jq -e ".action == \"joined\"" >/dev/null'
+check "webdav stores ciphertext" 'curl -s -u me:davpw $DAV > dav.blob && grep -q cipher dav.blob && ! grep -q -e carol -e ms-client-id dav.blob'
+check "webdav join (B) restores account" 'APARK_HOME="$W/davB" APARK_SYNC_PASSPHRASE=dav-secret $A cloud webdav --url $DAV --user me --password-env DPW --json | jq -e ".added == [\"carol@localhost\"]" >/dev/null'
+check "OAuth client settings follow" 'APARK_HOME="$W/davB" $A config show | jq -e ".microsoft_client_id == \"ms-client-id\"" >/dev/null'
+check "webdav wrong passphrase fails" '! APARK_HOME="$W/davC" APARK_SYNC_PASSPHRASE=nope $A cloud webdav --url $DAV --user me --password-env DPW >/dev/null 2>&1'
 check "error json" '! $A read 99999 --json | jq -e ".ok == false" >/dev/null || true'
 echo "all checks passed"

@@ -79,6 +79,26 @@ pub enum Backend {
 pub struct Snapshot {
     pub updated_at: i64,
     pub accounts: Vec<Account>,
+    /// OAuth client settings, so restored OAuth accounts can refresh their tokens.
+    pub clients: Clients,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Clients {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_client_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_client_secret: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub microsoft_client_id: Option<String>,
+}
+
+/// What gets encrypted. Older versions sealed a bare account array.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum Payload {
+    Full { accounts: Vec<Account>, #[serde(default)] clients: Clients },
+    Legacy(Vec<Account>),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -87,6 +107,8 @@ struct Stored {
     updated_at: i64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     accounts: Vec<Account>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    clients: Option<Clients>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cipher: Option<Cipher>,
 }
@@ -114,19 +136,19 @@ pub fn server_blob_id(user: &str, password: &str) -> Result<String> {
     Ok(id.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-fn seal(accounts: &[Account], passphrase: &str) -> Result<Cipher> {
+fn seal(payload: &Payload, passphrase: &str) -> Result<Cipher> {
     let mut salt = [0u8; 16];
     let mut nonce = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut salt);
     rand::thread_rng().fill_bytes(&mut nonce);
     let key: Key = argon(passphrase, &salt)?.into();
     let data = ChaCha20Poly1305::new(&key)
-        .encrypt(Nonce::from_slice(&nonce), serde_json::to_vec(accounts)?.as_slice())
+        .encrypt(Nonce::from_slice(&nonce), serde_json::to_vec(payload)?.as_slice())
         .map_err(|_| anyhow::anyhow!("加密失败"))?;
     Ok(Cipher { salt: B64.encode(salt), nonce: B64.encode(nonce), data: B64.encode(data) })
 }
 
-fn open(c: &Cipher, passphrase: &str) -> Result<Vec<Account>> {
+fn open(c: &Cipher, passphrase: &str) -> Result<Payload> {
     let key: Key = argon(passphrase, &B64.decode(&c.salt)?)?.into();
     let plain = ChaCha20Poly1305::new(&key)
         .decrypt(Nonce::from_slice(&B64.decode(&c.nonce)?), B64.decode(&c.data)?.as_slice())
@@ -137,22 +159,31 @@ fn open(c: &Cipher, passphrase: &str) -> Result<Vec<Account>> {
 pub fn encode(snap: &Snapshot, passphrase: Option<&str>) -> Result<Vec<u8>> {
     let accounts: Vec<Account> = snap.accounts.iter().map(Account::portable).collect();
     let stored = match passphrase {
-        Some(p) => Stored { apark: 1, updated_at: snap.updated_at, accounts: vec![], cipher: Some(seal(&accounts, p)?) },
-        None => Stored { apark: 1, updated_at: snap.updated_at, accounts, cipher: None },
+        Some(p) => Stored {
+            apark: 1,
+            updated_at: snap.updated_at,
+            accounts: vec![],
+            clients: None,
+            cipher: Some(seal(&Payload::Full { accounts, clients: snap.clients.clone() }, p)?),
+        },
+        None => Stored { apark: 1, updated_at: snap.updated_at, accounts, clients: Some(snap.clients.clone()), cipher: None },
     };
     Ok(serde_json::to_vec(&stored)?)
 }
 
 pub fn decode(bytes: &[u8], passphrase: Option<&str>) -> Result<Snapshot> {
     let stored: Stored = serde_json::from_slice(bytes).context("云端账号列表格式错误")?;
-    let accounts = match &stored.cipher {
-        None => stored.accounts,
+    let (accounts, clients) = match &stored.cipher {
+        None => (stored.accounts, stored.clients.unwrap_or_default()),
         Some(c) => match passphrase {
-            Some(p) => open(c, p)?,
+            Some(p) => match open(c, p)? {
+                Payload::Full { accounts, clients } => (accounts, clients),
+                Payload::Legacy(accounts) => (accounts, Clients::default()),
+            },
             None => bail!("账号列表已加密，请先设置同步密码"),
         },
     };
-    Ok(Snapshot { updated_at: stored.updated_at, accounts })
+    Ok(Snapshot { updated_at: stored.updated_at, accounts, clients })
 }
 
 // ---- transports -----------------------------------------------------------
@@ -244,11 +275,16 @@ pub async fn write(http: &reqwest::Client, b: &Backend, bytes: Vec<u8>) -> Resul
         Backend::Webdav { url, user, password } => {
             let put = || http.put(url).basic_auth(user, Some(password)).body(bytes.clone());
             let resp = put().send().await.context("连接 WebDAV 失败")?;
-            if matches!(resp.status().as_u16(), 404 | 409) {
-                // Parent collection missing: create it, then retry once.
-                if let Some((parent, _)) = url.trim_end_matches('/').rsplit_once('/') {
-                    let mkcol = reqwest::Method::from_bytes(b"MKCOL").expect("static method");
-                    let _ = http.request(mkcol, format!("{parent}/")).basic_auth(user, Some(password)).send().await;
+            if matches!(resp.status().as_u16(), 403 | 404 | 409) {
+                // Missing parent collections (servers answer 403, 404 or 409): create
+                // each level; existing ones answer 405, which is fine. Then retry once.
+                let parsed = url::Url::parse(url).context("WebDAV 地址无效")?;
+                let segments: Vec<&str> = parsed.path().trim_matches('/').split('/').collect();
+                let mkcol = reqwest::Method::from_bytes(b"MKCOL").expect("static method");
+                for depth in 1..segments.len() {
+                    let mut dir = parsed.clone();
+                    dir.set_path(&format!("/{}/", segments[..depth].join("/")));
+                    let _ = http.request(mkcol.clone(), dir).basic_auth(user, Some(password)).send().await;
                 }
                 put().send().await?.error_for_status().context("上传账号列表失败")?;
             } else {
@@ -292,18 +328,22 @@ mod tests {
 
     #[test]
     fn seal_roundtrip() {
-        let c = seal(&[acct()], "pass").unwrap();
+        let c = seal(&Payload::Legacy(vec![acct()]), "pass").unwrap();
         assert!(!c.data.contains("secret"));
-        assert_eq!(open(&c, "pass").unwrap()[0].email, "x@y.z");
+        assert!(matches!(open(&c, "pass").unwrap(), Payload::Legacy(a) if a[0].email == "x@y.z"));
         assert!(open(&c, "wrong").is_err());
     }
 
     #[test]
     fn encode_decode() {
-        let snap = Snapshot { updated_at: 7, accounts: vec![acct()] };
+        let clients = Clients { microsoft_client_id: Some("ms-id".into()), ..Default::default() };
+        let snap = Snapshot { updated_at: 7, accounts: vec![acct()], clients: clients.clone() };
         let enc = encode(&snap, Some("pw")).unwrap();
         assert!(!String::from_utf8_lossy(&enc).contains("secret"));
-        assert_eq!(decode(&enc, Some("pw")).unwrap().updated_at, 7);
+        assert!(!String::from_utf8_lossy(&enc).contains("ms-id"));
+        let back = decode(&enc, Some("pw")).unwrap();
+        assert_eq!(back.updated_at, 7);
+        assert_eq!(back.clients, clients);
         assert!(decode(&enc, None).is_err());
         let id1 = server_blob_id("Me", "pw").unwrap();
         assert_eq!(id1, server_blob_id("me", "pw").unwrap());

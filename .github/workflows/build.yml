@@ -23,6 +23,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
 
+  # End-to-end: real IMAP/SMTP (GreenMail), WebDAV and `apark server` in Docker on the runner.
+  e2e:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: e2e
+      - run: cargo build --release --locked -p apark-cli
+      - run: sh scripts/e2e-greenmail.sh
+
   # macOS: SwiftUI app (universal arm64 + x86_64), Rust core linked statically.
   macos:
     needs: test
