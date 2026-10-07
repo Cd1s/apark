@@ -10,6 +10,8 @@ pub mod engine;
 pub mod imap;
 pub mod oauth;
 pub mod paths;
+pub mod rpc;
+pub mod demo;
 pub mod smtp;
 pub mod store;
 

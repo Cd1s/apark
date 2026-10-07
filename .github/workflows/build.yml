@@ -31,8 +31,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, target: aarch64-apple-darwin, label: macos-arm64 }
-          - { os: macos-14, target: x86_64-apple-darwin, label: macos-x64 }
           - { os: windows-latest, target: x86_64-pc-windows-msvc, label: windows-x64 }
           - { os: windows-latest, target: aarch64-pc-windows-msvc, label: windows-arm64 }
           - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, label: linux-x64 }
@@ -62,6 +60,54 @@ jobs:
           name: apark-${{ matrix.label }}
           path: dist/*
 
+  # Native SwiftUI app (universal arm64 + x86_64) with the Rust core linked statically.
+  macos:
+    needs: test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-universal
+      - name: Build Rust core and CLI
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "13.0"
+        run: |
+          for t in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --target $t -p apark-ffi -p apark-cli
+          done
+          mkdir -p apps/macos/lib
+          lipo -create target/{aarch64,x86_64}-apple-darwin/release/libapark_ffi.a -output apps/macos/lib/libapark_ffi.a
+          lipo -create target/{aarch64,x86_64}-apple-darwin/release/apark -output target/apark
+      - name: Build SwiftUI app
+        run: |
+          cd apps/macos
+          swift build -c release --arch arm64 --arch x86_64
+      - name: Bundle
+        run: packaging/macos-bundle.sh apps/macos/.build/apple/Products/Release/Apark target/apark
+      - name: Screenshots
+        run: |
+          run() { perl -e 'alarm shift; exec @ARGV' "$@" || true; }
+          export APARK_NO_SYNC=1
+          APARK_HOME="$RUNNER_TEMP/demo" target/apark dev-seed
+          APARK_HOME="$RUNNER_TEMP/demo" APARK_SNAPSHOT="$PWD/shots" run 60 dist/Apark.app/Contents/MacOS/Apark
+          APARK_HOME="$RUNNER_TEMP/empty" APARK_SNAPSHOT="$PWD/shots/welcome" run 40 dist/Apark.app/Contents/MacOS/Apark
+          dist/Apark.app/Contents/MacOS/Apark --version
+          find shots -type f
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apark-macos-universal
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-macos
+          path: shots
+
   # Headless CLI as a fully static binary for any Linux server.
   cli-musl:
     needs: test
@@ -86,7 +132,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, cli-musl]
+    needs: [build, macos, cli-musl]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -94,6 +140,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
+          pattern: apark-*
           merge-multiple: true
       - run: cd dist && sha256sum * > SHA256SUMS
       - uses: softprops/action-gh-release@v2

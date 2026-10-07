@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use apark_core::account::Server;
-use apark_core::{categorize, Account, Engine, ListQuery, LoginOpts, MsgRow, Outgoing, Provider};
+use apark_core::rpc::account_json;
+use apark_core::{categorize, Engine, ListQuery, LoginOpts, MsgRow, Outgoing, Provider};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::json;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
@@ -157,6 +158,9 @@ enum Cmd {
     Config(ConfigCmd),
     /// 打印给 AI agent 的使用说明
     Guide,
+    /// 写入演示数据（截图/界面开发用）
+    #[command(hide = true)]
+    DevSeed,
 }
 
 #[derive(Args)]
@@ -332,12 +336,6 @@ fn login_opts(manual: bool) -> LoginOpts {
     }
 }
 
-fn account_json(a: &Account) -> serde_json::Value {
-    json!({
-        "email": a.email, "name": a.name, "provider": a.provider, "master": a.master,
-        "imap": format!("{}:{}", a.imap.host, a.imap.port), "smtp": format!("{}:{}", a.smtp.host, a.smtp.port),
-    })
-}
 
 fn read_body(b: &BodyArgs) -> Result<(String, Option<String>)> {
     let text = match (&b.body, &b.body_file) {
@@ -378,6 +376,10 @@ async fn dispatch(cli: Cli) -> Result<()> {
     let eng = Engine::open()?;
     match cli.cmd {
         Cmd::Guide => unreachable!(),
+        Cmd::DevSeed => {
+            let n = apark_core::demo::seed(&eng)?;
+            ok(json, &format!("已写入 {n} 封演示邮件"));
+        }
         Cmd::Login(a) => {
             let (acct, res) = eng.login_master(&login_opts(a.manual)).await?;
             out(json, json!({ "ok": true, "master": acct.email, "cloud": res }), || {

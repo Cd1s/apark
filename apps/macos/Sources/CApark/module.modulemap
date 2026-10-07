@@ -1,0 +1,4 @@
+module CApark {
+    header "../../../../crates/ffi/include/apark.h"
+    export *
+}

@@ -233,6 +233,13 @@ impl Engine {
         Ok(())
     }
 
+    /// Add an account without verifying it (demo data, tests).
+    pub fn insert_account_unchecked(&self, acct: Account) -> Result<()> {
+        let mut book = self.book();
+        book.upsert(acct);
+        book.save()
+    }
+
     // ---- cloud account sync -----------------------------------------------
 
     async fn master_token(&self) -> Result<Option<String>> {
