@@ -2,11 +2,17 @@
 
 一个快速、简洁的多账号邮件客户端，思路来自 Spark：**用一个 Google 总账号登录，其他邮箱自动回来**。
 
-- **桌面版**：macOS（Apple Silicon / Intel）、Windows（x64 / ARM64）、Linux（x64 / ARM64）。原生编译的 Rust 程序，GPU 渲染（egui），不是 Electron。邮件列表虚拟化，只绘制可见行，几万封邮件也能顺滑滚动。
+- **原生桌面版**：每个平台用自己的原生界面，不是 Electron / 网页套壳：
+  - macOS：**SwiftUI**（通用二进制，Apple Silicon + Intel）
+  - Windows：**WinUI 3**（Win11 Fluent 风格、Mica 材质，x64 / ARM64）
+  - Linux：**GTK4 + libadwaita**（GNOME 原生风格，x64 / ARM64）
+  三个界面共用同一个 Rust 内核，列表都是虚拟化的，几万封邮件也顺滑。
 - **CLI / 无头版**：`apark` 单文件，所有功能都能用命令完成，`--json` 输出稳定，适合 AI agent 和服务器。桌面版的可执行文件同样接受全部 CLI 命令。
 - **账号同步**：账号列表保存在总账号自己的 Google Drive 隐藏应用目录（`drive.appdata`），没有第三方服务器；可选同步密码，加密后再上传。
 
-![screenshot](docs/screenshot.png)
+| macOS (SwiftUI) | Linux (GTK4 / libadwaita) |
+|---|---|
+| ![macOS](docs/screenshot-macos.png) | ![Linux](docs/screenshot-linux.png) |
 
 ## 功能
 
@@ -24,7 +30,7 @@
 | 文件夹管理 | 浏览 | `folder create/rename/delete` |
 | 后台定时同步 | ✓ | `apark daemon` |
 
-键盘快捷键：`J/K` 上下、`E` 归档、`Delete` 删除、`R` 回复、`A` 全部回复、`F` 转发、`U` 未读、`S` 星标、`C` 写邮件、`/` 搜索、`⌘/Ctrl+Enter` 发送。
+快捷键（macOS 用 ⌘，Windows/Linux 用 Ctrl）：新邮件 `⌘N`、回复 `⌘R`、全部回复 `⇧⌘R`、转发 `⇧⌘F`、归档 `⌃⌘A`（Win/Linux `Ctrl+E`）、删除 `⌘⌫`（Win/Linux `Delete`）、标为未读 `⇧⌘U`、星标 `⇧⌘L`、收取 `⇧⌘N`（Win/Linux `F5`）、发送 `⌘↩`。
 
 ## 下载
 
@@ -32,11 +38,11 @@
 
 | 文件 | 内容 |
 |---|---|
-| `Apark-macos-arm64.zip` / `Apark-macos-x64.zip` | `Apark.app`（内含 `apark` CLI） |
-| `Apark-windows-x64.zip` / `Apark-windows-arm64.zip` | `Apark.exe` + `apark.exe` |
-| `Apark-linux-x64.tar.gz` / `Apark-linux-arm64.tar.gz` | `apark-desktop` + `apark` + `.desktop` 文件 |
+| `Apark-macos-universal.zip` | `Apark.app`（SwiftUI，内含 CLI） |
+| `Apark-windows-x64.zip` / `Apark-windows-arm64.zip` | `Apark.exe`（WinUI 3）+ `apark-cli.exe` + `apark_ffi.dll` |
+| `Apark-linux-x64.tar.gz` / `Apark-linux-arm64.tar.gz` | `apark-desktop`（GTK4）+ `apark` + `.desktop` 文件 |
 | `apark-cli-*` | 只有 CLI（无头服务器用） |
-| `apark-cli-linux-x64-static.tar.gz` | 静态链接 CLI，任何 Linux 都能跑 |
+| `apark-cli-linux-*-static.tar.gz` | 静态链接 CLI，任何 Linux 都能跑 |
 
 macOS 包没有经过 Apple 公证，第一次打开如提示“已损坏”，执行：
 
@@ -44,7 +50,9 @@ macOS 包没有经过 Apple 公证，第一次打开如提示“已损坏”，�
 xattr -dr com.apple.quarantine /Applications/Apark.app
 ```
 
-macOS 上让 CLI 可直接调用：`ln -s /Applications/Apark.app/Contents/MacOS/apark /usr/local/bin/apark`。
+桌面版本身也能当 CLI 用：`Apark.app/Contents/MacOS/Apark list`、`Apark.exe list`、`apark-desktop list`。
+macOS 上让 `apark` 命令可直接调用：`ln -s /Applications/Apark.app/Contents/MacOS/apark-cli /usr/local/bin/apark`。
+Linux 需要 GTK 4.12+ 和 libadwaita 1.5+（Ubuntu 24.04、Debian 13、Fedora 40 及更新版本）。
 
 ## 第一次使用：准备 Google OAuth 客户端
 
@@ -127,25 +135,29 @@ WantedBy=multi-user.target
 - 已读、星标、归档、删除先在本地生效，再异步同步到服务器。
 - 列表只绘制可见行；无动画、无 Web 引擎，常驻内存很小。
 
-HTML 邮件在应用内显示为纯文本版本，需要原始排版时点“🌐 浏览器打开”。
+HTML 邮件：macOS 用 WebKit、Windows 用 WebView2 直接渲染（禁用脚本，链接在浏览器打开）；Linux 显示纯文本版本，可一键在浏览器查看原始排版。
 
 ## 构建
 
 ```sh
-cargo test --workspace
-cargo build --release -p apark-cli        # 只要 CLI：target/release/apark
-cargo build --release -p apark-desktop    # 桌面版：target/release/apark-desktop
+cargo test                                   # 内核 + CLI 测试
+cargo build --release -p apark-cli           # CLI：target/release/apark
+cargo build --release -p apark-gtk           # Linux 桌面版（需要 libgtk-4-dev libadwaita-1-dev）
+scripts/e2e-greenmail.sh                     # 端到端测试（Docker 里起一个 GreenMail 邮件服务器）
 ```
 
-打 `v*` 标签后，GitHub Actions 会为全部平台和架构构建并发布 Release。
+macOS / Windows 桌面版的构建步骤见 `.github/workflows/build.yml`：先编译 `apark-ffi`（Rust 内核的 C 接口），再用 `swift build` / `dotnet publish` 编译原生界面。打 `v*` 标签后，GitHub Actions 会为全部平台和架构构建并发布 Release。
 
 ## 结构
 
 ```
-crates/core      账号、OAuth、IMAP 同步、SMTP、SQLite 缓存、云端账号同步
+crates/core      内核：账号、OAuth、IMAP 同步、SMTP、SQLite 缓存、云端账号同步、JSON RPC
 crates/cli       apark 命令（lib + bin，桌面版复用）
-crates/desktop   egui 桌面界面
-packaging/       各平台打包脚本
+crates/ffi       C 接口：apark_call(json) → json，给 Swift / C# 调用
+apps/macos       SwiftUI 界面
+apps/windows     WinUI 3 界面
+apps/linux       GTK4 + libadwaita 界面
+assets/          图标
 ```
 
 ## License

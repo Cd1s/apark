@@ -757,6 +757,8 @@ impl Ui {
         let row = self.state.borrow().rows[pos].clone();
         self.store.splice(pos as u32, 1, &[glib::BoxedAnyObject::new(row)]);
         self.selection.set_selected(pos as u32);
+        let unread = self.state.borrow().rows.iter().filter(|m| !m.seen).count();
+        self.list_title.set_subtitle(&if unread > 0 { format!("{unread} 封未读") } else { String::new() });
     }
 
     // ---- actions --------------------------------------------------------
