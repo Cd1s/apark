@@ -16,7 +16,16 @@ struct OnboardingView: View {
                 .font(.title3)
                 .foregroundStyle(.secondary)
 
-            if store.info?.googleReady == true {
+            if let sync = store.info?.sync {
+                Label("已开启\(sync.title)同步。添加的邮箱会自动同步到其他设备。", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .padding(.top, 8)
+                Button { store.showAddAccount = true } label: {
+                    Text("添加第一个邮箱").frame(width: 260)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else if store.info?.googleReady == true {
                 Button { store.loginMaster() } label: {
                     Text("使用 Google 账号登录").frame(width: 260)
                 }
@@ -37,8 +46,10 @@ struct OnboardingView: View {
                 .padding(.top, 8)
             }
 
-            Button("不同步，直接添加邮箱…") { store.showAddAccount = true }
-                .buttonStyle(.link)
+            if store.info?.sync == nil {
+                Button("不同步，直接添加邮箱…") { store.showAddAccount = true }
+                    .buttonStyle(.link)
+            }
 
             if store.info?.googleReady == false {
                 DisclosureGroup("配置 Google 登录（可选）") {

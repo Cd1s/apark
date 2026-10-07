@@ -97,7 +97,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "apark-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "apark-core",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "apark-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "argon2",
@@ -140,7 +140,7 @@ dependencies = [
 
 [[package]]
 name = "apark-ffi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "apark-core",
  "serde_json",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "apark-gtk"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "apark-cli",

@@ -306,6 +306,13 @@ final class AppStore: ObservableObject {
         struct Joined: Decodable { var added: [String] }
         let r: Joined = try await core.call("sync_setup", params)
         await afterAccountsChanged()
+        if accounts.isEmpty {
+            // Nothing to restore yet: go straight to adding the first mailbox.
+            Task {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                showAddAccount = true
+            }
+        }
         return r.added.count
     }
 

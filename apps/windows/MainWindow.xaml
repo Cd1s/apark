@@ -27,6 +27,8 @@
                 <TextBlock Text="欢迎使用 Apark" Style="{StaticResource TitleLargeTextBlockStyle}" HorizontalAlignment="Center" />
                 <TextBlock Text="登录一次，所有邮箱都会回来。" Style="{StaticResource BodyTextBlockStyle}" FontSize="18"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                <InfoBar x:Name="SyncOnBar" Severity="Success" IsClosable="False" IsOpen="False"
+                         Message="同步已开启。添加第一个邮箱后，会自动同步到其他设备。" />
                 <Button x:Name="GoogleButton" Content="使用 Google 账号登录" Style="{StaticResource AccentButtonStyle}"
                         HorizontalAlignment="Center" MinWidth="280" Padding="16,10" Click="Login_Click" Margin="0,8,0,0" />
                 <Button x:Name="SyncButtonPrimary" Content="使用自建服务器 / WebDAV / 同步文件夹" HorizontalAlignment="Center"

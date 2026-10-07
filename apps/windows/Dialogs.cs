@@ -222,6 +222,10 @@ public sealed class SyncSetupDialog
             busy.Visibility = Visibility.Collapsed;
             deferral.Complete();
         };
-        await dialog.ShowAsync();
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && !_main.HasAccounts)
+        {
+            // Nothing to restore yet: go straight to adding the first mailbox.
+            await new AddAccountDialog(_main, await Core.Call<Info>("info")).ShowAsync(root);
+        }
     }
 }

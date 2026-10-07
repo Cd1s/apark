@@ -544,6 +544,13 @@ impl Ui {
     fn refresh_accounts(self: &Rc<Self>) {
         let accounts = self.eng.accounts();
         self.stack.set_visible_child_name(if accounts.is_empty() { "welcome" } else { "main" });
+        if let (true, Some(t)) = (accounts.is_empty(), self.eng.sync_target()) {
+            self.welcome.set_description(Some(&format!(
+                "已开启{}同步（{}）。点“不同步，直接添加邮箱…”添加第一个邮箱，之后会自动同步到其他设备。",
+                sync_title(t.kind()),
+                t.describe()
+            )));
+        }
         self.state.borrow_mut().accounts = accounts;
         self.rebuild_sidebar();
     }
@@ -1152,9 +1159,14 @@ impl Ui {
                     btn.set_sensitive(true);
                     btn.set_label("开始同步");
                     if let Some(res) = u.report(r) {
-                        u.toast(&format!("账号同步已开启，恢复了 {} 个账号", res.added.len()));
                         d.close();
                         u.after_accounts_changed();
+                        if u.state.borrow().accounts.is_empty() {
+                            u.toast("同步已开启。添加第一个邮箱后，会自动同步到其他设备");
+                            u.add_account_dialog();
+                        } else {
+                            u.toast(&format!("同步已开启，恢复了 {} 个账号", res.added.len()));
+                        }
                     }
                 });
             });
