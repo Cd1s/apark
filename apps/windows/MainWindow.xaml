@@ -24,7 +24,7 @@
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="14" Margin="0,80,0,40" MaxWidth="460">
                 <Image Source="Assets/icon-256.png" Width="112" Height="112" />
                 <TextBlock Text="欢迎使用 Apark" Style="{StaticResource TitleLargeTextBlockStyle}" HorizontalAlignment="Center" />
-                <TextBlock Text="登录一次，所有邮箱都会回来。" Style="{StaticResource BodyLargeTextBlockStyle}"
+                <TextBlock Text="登录一次，所有邮箱都会回来。" Style="{StaticResource BodyTextBlockStyle}" FontSize="18"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" TextWrapping="Wrap" />
                 <StackPanel x:Name="ClientPanel" Spacing="8" Visibility="Collapsed" Margin="0,8,0,0">
                     <TextBlock Text="首次使用：填入你的 Google OAuth 客户端（桌面应用类型，见 README）" TextWrapping="Wrap"
@@ -136,7 +136,7 @@
                 <Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}">
                     <StackPanel x:Name="ReaderEmpty" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="10">
                         <FontIcon Glyph="&#xE8C3;" FontSize="52" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                        <TextBlock Text="没有选中邮件" Style="{StaticResource BodyLargeTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        <TextBlock Text="没有选中邮件" Style="{StaticResource BodyTextBlockStyle}" FontSize="18" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
                     <Grid x:Name="Reader" Visibility="Collapsed">
                         <Grid.RowDefinitions>
